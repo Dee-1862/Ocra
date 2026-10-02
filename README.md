@@ -32,7 +32,9 @@ contract" in [AGENTS.md](./AGENTS.md).
 
 Prerequisites: Pico SDK 2.3.0 and the arm-none-eabi toolchain under
 `~/.pico-sdk`, plus Python 3. Host tests additionally want MSYS2 MinGW GCC on
-Windows.
+Windows. `fw build` uses the `target` CMake preset on Windows and
+`target-posix` on macOS and Linux; both expect the Raspberry Pi Pico
+extension's layout (`toolchain/15_2_Rel1`, `ninja/v1.13.2`).
 
 ```bash
 fw bootloader              # once per board: serial bootloader -> display CPU
@@ -93,7 +95,7 @@ Pico SDK. To try the example without wiring that up yourself, let this repo
 fetch LVGL for you:
 
 ```bash
-cmake --preset target -DFWOG_LVGL_FETCH=ON
+cmake --preset target -DFWOG_LVGL_FETCH=ON   # target-posix on macOS/Linux
 cmake --build build --target lvgl_main
 fw flash lvgl_main
 ```

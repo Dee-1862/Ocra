@@ -67,7 +67,7 @@ most costly.
 
 | Command                                        | What it does                                                                                            |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `fw build [app]`                               | configure + build via the `target` preset                                                               |
+| `fw build [app]`                               | configure + build via the `target` preset (Windows) or `target-posix` (macOS/Linux)                     |
 | `fw flash <app>`                               | reboot the app's own CPU into BOOTSEL, then copy its `.uf2`. **Main apps only — see the warning below.** |
 | `fw test`                                      | build + run the host CTest tree, then the `tools/tests/` Python unit tests for `fw.py` itself            |
 | `fw new-app <name> --cpu display\|main`        | scaffold from the matching template                                                                     |
@@ -137,7 +137,7 @@ neither CPU.
 > own — `lcd_display`, say — name it globally and use any main app:
 >
 > ```
-> cmake --preset target -DFWOG_DISPLAY_FIRMWARE=lcd_display
+> cmake --preset target -DFWOG_DISPLAY_FIRMWARE=lcd_display   # target-posix on macOS/Linux
 > fw build template_main && fw flash template_main
 > ```
 >

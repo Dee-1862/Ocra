@@ -14,17 +14,55 @@ class TestFwCommands(unittest.TestCase):
         # `fw build` must work on a fresh checkout with no build/ tree, so it
         # configures before building. `cmake --build --preset` alone fails
         # with "not a directory" when nothing has been configured yet.
-        self.assertEqual(fw.configure_command(), ["cmake", "--preset", "target"])
+        preset = fw.preset_name()
+        self.assertEqual(fw.configure_command(), ["cmake", "--preset", preset])
         self.assertEqual(
             fw.build_command("hello_main"),
-            ["cmake", "--build", "--preset", "target", "--target", "hello_main"],
+            ["cmake", "--build", "--preset", preset, "--target", "hello_main"],
         )
 
+    def test_preset_name_per_host_family(self):
+        # Windows reaches ~/.pico-sdk through %USERPROFILE% and ninja.exe;
+        # everything else through $HOME and plain ninja. One preset each.
+        self.assertEqual(fw.preset_name("win32"), "target")
+        self.assertEqual(fw.preset_name("darwin"), "target-posix")
+        self.assertEqual(fw.preset_name("linux"), "target-posix")
+
+    def test_presets_file_defines_both_presets(self):
+        # fw.py and CMakePresets.json must agree on the names, or `fw build`
+        # fails on one host family with "No such preset".
+        import json
+        presets = json.loads((fw.REPO_ROOT / "CMakePresets.json").read_text())
+        names = {p["name"] for p in presets["configurePresets"]}
+        builds = {p["name"] for p in presets["buildPresets"]}
+        for plat in ("win32", "darwin", "linux"):
+            self.assertIn(fw.preset_name(plat), names)
+            self.assertIn(fw.preset_name(plat), builds)
+
     def test_uf2_path(self):
+        # Both halves of a pair share apps/<folder>/, and CMake mirrors that
+        # in build/, so the image is under the folder, not the target name.
         self.assertEqual(
             fw.uf2_path("hello_main"),
-            fw.REPO_ROOT / "build" / "apps" / "hello_main" / "hello_main.uf2",
+            fw.REPO_ROOT / "build" / "apps" / "hello" / "hello_main.uf2",
         )
+        self.assertEqual(
+            fw.uf2_path("template_main"),
+            fw.REPO_ROOT / "build" / "apps" / "template" / "template_main.uf2",
+        )
+
+    def test_uf2_path_for_the_bootloader(self):
+        # `fw bootloader` flashes bl_display, which apps/bl/ declares.
+        self.assertEqual(
+            fw.uf2_path(fw.BOOTLOADER_APP),
+            fw.REPO_ROOT / "build" / "apps" / "bl" / "bl_display.uf2",
+        )
+
+    def test_app_folder(self):
+        self.assertEqual(fw.app_folder("ogvegas_main"), "ogvegas")
+        self.assertEqual(fw.app_folder("lcd_display"), "lcd")
+        self.assertEqual(fw.app_folder("my_cool_app_main"), "my_cool_app")
+        self.assertEqual(fw.app_folder("cpuprobe"), "cpuprobe")
 
     def test_uf2_path_override_wins_and_ignores_repo_root(self):
         """--uf2 is what lets a project consuming this BSP as a submodule use
@@ -203,7 +241,8 @@ class TestBootloaderAndConsole(unittest.TestCase):
     def test_configure_command_unchanged_without_baud(self):
         # The existing no-argument behavior must not shift: --baud is an
         # addition, and every other caller passes nothing.
-        self.assertEqual(fw.configure_command(), ["cmake", "--preset", "target"])
+        self.assertEqual(fw.configure_command(),
+                         ["cmake", "--preset", fw.preset_name()])
 
     def test_configure_command_with_baud(self):
         # The link rate is compile-time and shared by BOTH binaries, so it
@@ -211,7 +250,7 @@ class TestBootloaderAndConsole(unittest.TestCase):
         # -DPICO_BOARD -- that one must never appear on a command line.
         self.assertEqual(
             fw.configure_command(8333333),
-            ["cmake", "--preset", "target", "-DFWOG_LINK_BAUD=8333333"],
+            ["cmake", "--preset", fw.preset_name(), "-DFWOG_LINK_BAUD=8333333"],
         )
 
     def test_bootloader_app_targets_the_display_cpu(self):

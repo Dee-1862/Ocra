@@ -116,8 +116,21 @@ _PNP_SCRIPT = (
 )
 
 
+def preset_name(platform=None):
+    """The CMake preset for this host.
+
+    CMakePresets.json carries one preset per host family. Both point at the
+    Raspberry Pi Pico extension's ~/.pico-sdk layout, but a preset can only
+    name one environment variable per path and cannot fall back to another:
+    Windows reaches that folder through %USERPROFILE% and runs ninja.exe,
+    macOS and Linux reach it through $HOME and run plain `ninja`. Each preset
+    carries a `condition` that disables it on the other family's hosts."""
+    platform = sys.platform if platform is None else platform
+    return "target" if platform == "win32" else "target-posix"
+
+
 def configure_command(baud=None):
-    cmd = ["cmake", "--preset", "target"]
+    cmd = ["cmake", "--preset", preset_name()]
     if baud is not None:
         # A cache variable, because both binaries compile it in and must
         # agree. Unlike PICO_BOARD (which must NEVER be passed on a command
@@ -129,7 +142,7 @@ def configure_command(baud=None):
 
 
 def build_command(app):
-    return ["cmake", "--build", "--preset", "target", "--target", app]
+    return ["cmake", "--build", "--preset", preset_name(), "--target", app]
 
 
 def uf2_path(app, override=None):
@@ -145,10 +158,25 @@ def uf2_path(app, override=None):
     where the file came from.
 
     The CPU is still inferred from `app`, so a consumer passing --uf2 must
-    still name its app with the _display/_main suffix -- see app_cpu()."""
+    still name its app with the _display/_main suffix -- see app_cpu().
+
+    In-tree, the image is under the app's FOLDER, not its target name: both
+    halves of a pair share apps/<folder>/ (see AGENTS.md, "App layout"), and
+    CMake mirrors that, so template_main lands in
+    build/apps/template/template_main.uf2 and bl_display in
+    build/apps/bl/bl_display.uf2."""
     if override is not None:
         return pathlib.Path(override)
-    return REPO_ROOT / "build" / "apps" / app / f"{app}.uf2"
+    return REPO_ROOT / "build" / "apps" / app_folder(app) / f"{app}.uf2"
+
+
+def app_folder(app):
+    """The apps/ folder an app's target lives in: its name without the
+    _display/_main suffix. A name without either suffix is its own folder."""
+    for suffix in ("_display", "_main"):
+        if app.endswith(suffix):
+            return app[: -len(suffix)]
+    return app
 
 
 def app_cpu(app):
@@ -852,7 +880,7 @@ def main(argv=None):
     # build tree, not this one. See uf2_path().
     f.add_argument("--uf2", default=None,
                    help="path to the .uf2 to copy (default: this repo's "
-                        "build/apps/<app>/<app>.uf2)")
+                        "build/apps/<folder>/<app>.uf2)")
     f.add_argument("--print", action="store_true", dest="do_print")
 
     bl = sub.add_parser("bootloader")
@@ -895,7 +923,7 @@ def main(argv=None):
         _run(test_command(), a.do_print); return 0
     if a.cmd == "new-app":
         d = new_app(a.name, a.cpu)
-        print(f"created {d}\nAdd `add_subdirectory(apps/{a.name})` to CMakeLists.txt")
+        print(f"created {d}\nAdd `add_subdirectory(apps/{d.name})` to CMakeLists.txt")
         return 0
     return 1
 

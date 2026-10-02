@@ -1,4 +1,4 @@
-See [AGENTS.md](./AGENTS.md) — it is the orientation doc for this repo.
+@AGENTS.md
 
 If `AGENTS.local.md` is present, read it as well. It holds maintainer-only
 context — hardware verification history, porting-reference notes, and the
