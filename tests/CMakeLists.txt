@@ -167,3 +167,8 @@ fwog_add_cpu_test(test_bl_update display
     ${BSP}/common/link/bl_proto.c
     ${BSP}/display_cpu/bootloader/bl_receiver.c
     ${BSP}/display_cpu/bootloader/bl_flash.c)
+
+# WiliRehab's host<->OG line protocol. Lives with its app, not in bsp/, so the
+# app's own directory is added to the include path.
+fwog_add_test(test_rehab_proto ${CMAKE_CURRENT_SOURCE_DIR}/../apps/wilirehab/display/rehab_proto.c)
+target_include_directories(test_rehab_proto PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../apps/wilirehab/display)

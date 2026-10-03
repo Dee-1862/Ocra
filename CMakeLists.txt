@@ -124,7 +124,12 @@ add_subdirectory(apps/lcd)
 add_subdirectory(apps/bl)
 
 add_subdirectory(apps/template)
-add_subdirectory(apps/button_lights)
+add_subdirectory(apps/wilirehab)
+# apps/button_lights is listed upstream but absent from the tree; skip it
+# rather than fail every configure.
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/apps/button_lights)
+    add_subdirectory(apps/button_lights)
+endif()
 add_subdirectory(apps/smoke)
 add_subdirectory(apps/bench)
 add_subdirectory(apps/ogvegas)
