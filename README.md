@@ -83,7 +83,7 @@ still work but are deprecated. A folder with no `main/` has no companion.
 | `ogvegas`   | Showcase: LCD image, audio replay and an animated LED comet, all at once.        |
 | `lvgl`      | LVGL example — a list you drive with the front-panel buttons. Opt-in, see below. |
 | `bench`     | Console for poking every driver from the host, via `tools/bench.py`.             |
-| `smoke`     | Bare-board bring-up: clocks, USB, the inter-CPU link.                            |
+| `smoketest` | Link soak at the production baud: counts errors, reports both CPUs' clocks.      |
 | `lcd`       | ST7789 panel bring-up on its own.                                                |
 | `bl`        | The display serial bootloader. Flashed once per board.                           |
 | `cpuprobe`  | Answers "which CPU is this?" on a board where you cannot tell.                   |

@@ -239,9 +239,8 @@ Every display app declares a power policy or **does not link** —
   main-loop iteration, and take your buttons from its return value rather than
   calling `fwog_buttons_poll()` again: that call carries the debounce state
   the hold machine depends on.
-- `FWOG_POWER_CUSTOM()` — this app owns power itself. `bl_display` (through
-  `bl_ship.c`) and `smoke_display` (any button escapes to BOOTSEL) both do,
-  truthfully.
+- `FWOG_POWER_CUSTOM()` — this app owns power itself. `bl_display` does,
+  truthfully, through `bl_ship.c`.
 
 **Read this limit.** The link error proves a policy was *declared*, not that
 `fwog_power_poll()` is *called*. No linker can see that, and the runtime

@@ -121,7 +121,7 @@ add_subdirectory(apps/lcd)
 add_subdirectory(apps/bl)
 
 add_subdirectory(apps/template)
-add_subdirectory(apps/smoke)
+add_subdirectory(apps/smoketest)
 add_subdirectory(apps/bench)
 add_subdirectory(apps/ogvegas)
 # Declares nothing unless LVGL is available -- see apps/lvgl/CMakeLists.txt.
