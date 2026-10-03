@@ -14,17 +14,97 @@ class TestFwCommands(unittest.TestCase):
         # `fw build` must work on a fresh checkout with no build/ tree, so it
         # configures before building. `cmake --build --preset` alone fails
         # with "not a directory" when nothing has been configured yet.
-        self.assertEqual(fw.configure_command(), ["cmake", "--preset", "target"])
+        preset = fw.preset_name()
+        cmake = fw.cmake_tool()
+        self.assertEqual(fw.configure_command(), [cmake, "--preset", preset])
         self.assertEqual(
             fw.build_command("hello_main"),
-            ["cmake", "--build", "--preset", "target", "--target", "hello_main"],
+            [cmake, "--build", "--preset", preset, "--target", "hello_main"],
         )
 
+    def _pico_cmake_home(self, versions, exe="cmake"):
+        import tempfile
+        home = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(__import__("shutil").rmtree, home)
+        for v in versions:
+            b = home / ".pico-sdk" / "cmake" / v / "bin"
+            b.mkdir(parents=True)
+            for tool in ("cmake", "ctest"):
+                name = tool + (".exe" if exe.endswith(".exe") else "")
+                (b / name).write_text("")
+        return home
+
+    def test_cmake_tool_prefers_path(self):
+        home = self._pico_cmake_home(["v4.3.4"])
+        self.assertEqual(fw.cmake_tool(which=lambda t: "/usr/bin/" + t, home=home), "cmake")
+
+    def test_cmake_tool_falls_back_to_the_pico_extension(self):
+        # The extension installs CMake under ~/.pico-sdk/cmake/<version>/bin
+        # and never adds it to PATH. Newest wins, compared numerically.
+        home = self._pico_cmake_home(["v3.31.5", "v4.9.1", "v4.10.0"])
+        got = fw.cmake_tool(which=lambda t: None, home=home, platform="darwin")
+        self.assertEqual(got, str(home / ".pico-sdk" / "cmake" / "v4.10.0" / "bin" / "cmake"))
+        got = fw.cmake_tool("ctest", which=lambda t: None, home=home, platform="linux")
+        self.assertEqual(got, str(home / ".pico-sdk" / "cmake" / "v4.10.0" / "bin" / "ctest"))
+
+    def test_cmake_tool_windows_looks_for_exe(self):
+        home = self._pico_cmake_home(["v4.3.4"], exe="cmake.exe")
+        got = fw.cmake_tool(which=lambda t: None, home=home, platform="win32")
+        self.assertEqual(got, str(home / ".pico-sdk" / "cmake" / "v4.3.4" / "bin" / "cmake.exe"))
+
+    def test_cmake_tool_with_nothing_installed_returns_the_bare_name(self):
+        home = self._pico_cmake_home([])
+        self.assertEqual(fw.cmake_tool(which=lambda t: None, home=home), "cmake")
+        self.assertEqual(fw.cmake_tool(which=lambda t: None, home=home / "nowhere"), "cmake")
+
+    def test_missing_cmake_explains_itself_instead_of_a_traceback(self):
+        with unittest.mock.patch.object(fw.subprocess, "run", side_effect=FileNotFoundError):
+            with self.assertRaises(SystemExit) as cm:
+                fw._run([["cmake", "--preset", "target-posix"]], do_print=False)
+        self.assertIn("Raspberry Pi Pico VS Code extension", str(cm.exception.code))
+
+    def test_preset_name_per_host_family(self):
+        # Windows reaches ~/.pico-sdk through %USERPROFILE% and ninja.exe;
+        # everything else through $HOME and plain ninja. One preset each.
+        self.assertEqual(fw.preset_name("win32"), "target")
+        self.assertEqual(fw.preset_name("darwin"), "target-posix")
+        self.assertEqual(fw.preset_name("linux"), "target-posix")
+
+    def test_presets_file_defines_both_presets(self):
+        # fw.py and CMakePresets.json must agree on the names, or `fw build`
+        # fails on one host family with "No such preset".
+        import json
+        presets = json.loads((fw.REPO_ROOT / "CMakePresets.json").read_text())
+        names = {p["name"] for p in presets["configurePresets"]}
+        builds = {p["name"] for p in presets["buildPresets"]}
+        for plat in ("win32", "darwin", "linux"):
+            self.assertIn(fw.preset_name(plat), names)
+            self.assertIn(fw.preset_name(plat), builds)
+
     def test_uf2_path(self):
+        # Both halves of a pair share apps/<folder>/, and CMake mirrors that
+        # in build/, so the image is under the folder, not the target name.
         self.assertEqual(
             fw.uf2_path("hello_main"),
-            fw.REPO_ROOT / "build" / "apps" / "hello_main" / "hello_main.uf2",
+            fw.REPO_ROOT / "build" / "apps" / "hello" / "hello_main.uf2",
         )
+        self.assertEqual(
+            fw.uf2_path("template_main"),
+            fw.REPO_ROOT / "build" / "apps" / "template" / "template_main.uf2",
+        )
+
+    def test_uf2_path_for_the_bootloader(self):
+        # `fw bootloader` flashes bl_display, which apps/bl/ declares.
+        self.assertEqual(
+            fw.uf2_path(fw.BOOTLOADER_APP),
+            fw.REPO_ROOT / "build" / "apps" / "bl" / "bl_display.uf2",
+        )
+
+    def test_app_folder(self):
+        self.assertEqual(fw.app_folder("ogvegas_main"), "ogvegas")
+        self.assertEqual(fw.app_folder("lcd_display"), "lcd")
+        self.assertEqual(fw.app_folder("my_cool_app_main"), "my_cool_app")
+        self.assertEqual(fw.app_folder("cpuprobe"), "cpuprobe")
 
     def test_uf2_path_override_wins_and_ignores_repo_root(self):
         """--uf2 is what lets a project consuming this BSP as a submodule use
@@ -54,9 +134,9 @@ class TestFwCommands(unittest.TestCase):
         # this, nothing in the repo ever ran tools/tests/test_fw.py.
         cmds = fw.test_command()
         self.assertEqual(len(cmds), 4)
-        self.assertEqual(cmds[0][0], "cmake")   # configure
-        self.assertEqual(cmds[1][0], "cmake")   # build
-        self.assertEqual(cmds[2][0], "ctest")   # run
+        self.assertEqual(cmds[0][0], fw.cmake_tool())          # configure
+        self.assertEqual(cmds[1][0], fw.cmake_tool())          # build
+        self.assertEqual(cmds[2][0], fw.cmake_tool("ctest"))   # run
         self.assertEqual(cmds[3][0], sys.executable)
         self.assertIn("unittest", cmds[3])
         self.assertIn("discover", cmds[3])
@@ -131,6 +211,141 @@ class TestFwCommands(unittest.TestCase):
                 if "fwog_embed_display_image(blinky_main)" in line:
                     self.assertTrue(line.lstrip().startswith("#"), line)
 
+    def test_new_app_pair_copies_both_halves(self):
+        """No --cpu: the whole template, renamed, so the main half carries
+        the display half and the pair can be flashed with <name>_main."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            tpl = self._fake_template(root)
+            (tpl / "display" / "main.c").write_text('DIAG("[template_display] alive\\n");\n')
+
+            dest = fw.new_app("button_lights", repo_root=root)
+
+            self.assertEqual(dest, root / "apps" / "button_lights")
+            self.assertTrue((dest / "display" / "main.c").exists())
+            self.assertTrue((dest / "main" / "main.c").exists())
+            text = (dest / "CMakeLists.txt").read_text()
+            self.assertIn("add_executable(button_lights_display", text)
+            self.assertIn("add_executable(button_lights_main", text)
+            self.assertIn("\nfwog_embed_display_image(button_lights_main)", text)
+            self.assertNotIn("template", text)
+            self.assertIn("[button_lights_display]", (dest / "display" / "main.c").read_text())
+            # The template itself is untouched.
+            self.assertIn("template_main", (tpl / "CMakeLists.txt").read_text())
+            # And `fw flash button_lights_main` looks exactly where it builds.
+            self.assertEqual(fw.app_folder("button_lights_main"), dest.name)
+
+    def test_new_app_pair_rejects_bad_names(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            self._fake_template(root)
+            for bad in ("Button Lights", "button-lights", "2cool", "",
+                        "button_lights_main", "button_lights_display"):
+                with self.assertRaises(ValueError, msg=bad):
+                    fw.new_app(bad, repo_root=root)
+            self.assertEqual(sorted(p.name for p in (root / "apps").iterdir()), ["template"])
+
+    def test_new_app_pair_refuses_to_overwrite(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            self._fake_template(root)
+            (root / "apps" / "taken").mkdir()
+            with self.assertRaises(FileExistsError):
+                fw.new_app("taken", repo_root=root)
+
+    @staticmethod
+    def _fake_top_cmakelists(root):
+        top = root / "CMakeLists.txt"
+        top.write_text("add_subdirectory(apps/lcd)\n"
+                       "add_subdirectory(apps/bl)\n\n"
+                       "add_subdirectory(apps/template)\n"
+                       "add_subdirectory(apps/smoke)\n")
+        return top
+
+    def test_register_app_goes_under_template_once(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            top = self._fake_top_cmakelists(root)
+            self.assertTrue(fw.register_app("button_lights", repo_root=root))
+            self.assertFalse(fw.register_app("button_lights", repo_root=root))
+            lines = top.read_text().splitlines()
+            i = lines.index("add_subdirectory(apps/template)")
+            self.assertEqual(lines[i + 1], "add_subdirectory(apps/button_lights)")
+            self.assertEqual(lines.count("add_subdirectory(apps/button_lights)"), 1)
+            # The display-only apps (lcd, bl) stay ahead of every main app.
+            self.assertLess(lines.index("add_subdirectory(apps/bl)"), i)
+
+    def test_register_app_appends_without_a_template_line(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            top = root / "CMakeLists.txt"
+            top.write_text("add_subdirectory(apps/smoke)")   # no trailing newline
+            fw.register_app("blinky", repo_root=root)
+            self.assertEqual(top.read_text(),
+                             "add_subdirectory(apps/smoke)\nadd_subdirectory(apps/blinky)\n")
+
+    def test_cli_new_app_pair_registers_and_prints_next_steps(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            self._fake_template(root)
+            top = self._fake_top_cmakelists(root)
+            out = io.StringIO()
+            with unittest.mock.patch.object(fw, "REPO_ROOT", root), \
+                    contextlib.redirect_stdout(out):
+                self.assertEqual(fw.main(["new-app", "button_lights"]), 0)
+            self.assertIn("add_subdirectory(apps/button_lights)", top.read_text())
+            text = out.getvalue()
+            self.assertIn("added to CMakeLists.txt", text)
+            self.assertIn("python tools/fw.py build button_lights_main", text)
+            self.assertIn("python tools/fw.py flash button_lights_main", text)
+
+    def test_cli_new_app_pair_with_line_already_present(self):
+        # e.g. someone added the line by hand before running new-app.
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            self._fake_template(root)
+            top = self._fake_top_cmakelists(root)
+            top.write_text(top.read_text() + "add_subdirectory(apps/button_lights)\n")
+            before = top.read_text()
+            out = io.StringIO()
+            with unittest.mock.patch.object(fw, "REPO_ROOT", root), \
+                    contextlib.redirect_stdout(out):
+                self.assertEqual(fw.main(["new-app", "button_lights"]), 0)
+            self.assertEqual(top.read_text(), before)
+            self.assertIn("already in CMakeLists.txt", out.getvalue())
+
+    def test_cli_new_app_half_does_not_touch_cmakelists(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            self._fake_template(root)
+            top = self._fake_top_cmakelists(root)
+            before = top.read_text()
+            out = io.StringIO()
+            with unittest.mock.patch.object(fw, "REPO_ROOT", root), \
+                    contextlib.redirect_stdout(out):
+                self.assertEqual(fw.main(["new-app", "lcd2_display", "--cpu", "display"]), 0)
+            self.assertEqual(top.read_text(), before)
+            self.assertIn("Add `add_subdirectory(apps/lcd2)`", out.getvalue())
+
+    def test_cli_new_app_bad_name_is_one_line_not_a_traceback(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            self._fake_template(root)
+            err = io.StringIO()
+            with unittest.mock.patch.object(fw, "REPO_ROOT", root), \
+                    contextlib.redirect_stderr(err):
+                self.assertEqual(fw.main(["new-app", "Button Lights"]), 2)
+            self.assertTrue(err.getvalue().startswith("fw new-app: "))
+
     def test_scan_rpi_rp2_no_volume(self):
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
@@ -203,7 +418,8 @@ class TestBootloaderAndConsole(unittest.TestCase):
     def test_configure_command_unchanged_without_baud(self):
         # The existing no-argument behavior must not shift: --baud is an
         # addition, and every other caller passes nothing.
-        self.assertEqual(fw.configure_command(), ["cmake", "--preset", "target"])
+        self.assertEqual(fw.configure_command(),
+                         [fw.cmake_tool(), "--preset", fw.preset_name()])
 
     def test_configure_command_with_baud(self):
         # The link rate is compile-time and shared by BOTH binaries, so it
@@ -211,7 +427,7 @@ class TestBootloaderAndConsole(unittest.TestCase):
         # -DPICO_BOARD -- that one must never appear on a command line.
         self.assertEqual(
             fw.configure_command(8333333),
-            ["cmake", "--preset", "target", "-DFWOG_LINK_BAUD=8333333"],
+            [fw.cmake_tool(), "--preset", fw.preset_name(), "-DFWOG_LINK_BAUD=8333333"],
         )
 
     def test_bootloader_app_targets_the_display_cpu(self):
