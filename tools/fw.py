@@ -12,7 +12,11 @@ Commands:
   fw test                    build+run the host unit tests (CTest, no
                               hardware), then the tools/tests/ unit tests
                               for this task runner
-  fw new-app <name> --cpu display|main
+  fw new-app <name>          copy apps/template (the display+main pair) to
+                              apps/<name>/ and add it to CMakeLists.txt
+  fw new-app <name>_display|<name>_main --cpu display|main
+                              scaffold one half only (add it to
+                              CMakeLists.txt yourself)
 Add --print to print the command(s) instead of running them.
 
 `fw console` supersedes the `fw mon` that earlier versions of this file
@@ -353,7 +357,19 @@ def test_command():
     ]
 
 
-def new_app(name, cpu, repo_root=REPO_ROOT):
+APP_NAME_RE = re.compile(r"[a-z][a-z0-9_]*")
+
+
+def new_app(name, cpu=None, repo_root=REPO_ROOT):
+    """Scaffold a new app from apps/template.
+
+    With no `cpu`, copy the whole template -- the display+main pair -- to
+    apps/<name>/, with targets <name>_display and <name>_main. That is what a
+    new app almost always wants: the display half is where the LCD, buttons
+    and LEDs live, and it can only reach the board embedded in a main half.
+    With `cpu`, scaffold just that half (see below)."""
+    if cpu is None:
+        return _new_app_pair(name, repo_root)
     if cpu not in ("display", "main"):
         raise ValueError(f"cpu must be 'display' or 'main', got {cpu!r}")
     # `fw flash` derives the CPU from the app-name suffix alone -- it never
@@ -406,6 +422,51 @@ def new_app(name, cpu, repo_root=REPO_ROOT):
                 f"# fwog_embed_display_image({name})")
     cml.write_text(text)
     return dest
+
+
+def _new_app_pair(name, repo_root):
+    if not APP_NAME_RE.fullmatch(name):
+        raise ValueError(
+            f"{name!r} is not a usable app name: use lowercase letters, digits "
+            "and underscores, starting with a letter (e.g. button_lights)")
+    if name.endswith(("_display", "_main")):
+        raise ValueError(
+            f"give the bare name for a display+main pair (fw new-app "
+            f"{app_folder(name)}); for one half only, add --cpu")
+    src = pathlib.Path(repo_root) / "apps" / "template"
+    dest = pathlib.Path(repo_root) / "apps" / name
+    if dest.exists():
+        raise FileExistsError(f"apps/{name} already exists")
+    shutil.copytree(src, dest)
+    # Targets in the CMakeLists, and the [template_display]/[template_main]
+    # tags the sources print, so DIAG output names the app it came from.
+    for f in [dest / "CMakeLists.txt", *sorted(dest.glob("*/*.c"))]:
+        f.write_text(f.read_text().replace("template_", f"{name}_"))
+    return dest
+
+
+def register_app(folder, repo_root=REPO_ROOT):
+    """Add `add_subdirectory(apps/<folder>)` to the top-level CMakeLists.txt.
+
+    For a display+main PAIR only. A pair carries its own display image, so
+    where its line sits does not matter (see the ordering note above
+    add_subdirectory(apps/lcd) in that file); it goes straight under
+    apps/template, or at the end if that line is gone. A display-only app is
+    different -- it must be listed before any main app that embeds it -- so
+    the single-half --cpu form leaves placement to a human.
+
+    Returns True when the line was added, False when it was already there."""
+    top = pathlib.Path(repo_root) / "CMakeLists.txt"
+    line = f"add_subdirectory(apps/{folder})"
+    lines = top.read_text().splitlines()
+    if line in (l.strip() for l in lines):
+        return False
+    anchor = "add_subdirectory(apps/template)"
+    at = next((i + 1 for i, l in enumerate(lines) if l.strip() == anchor), len(lines))
+    lines.insert(at, line)
+    top.write_text("\n".join(lines) + "\n")
+    return True
+
 
 
 def _run(cmds, do_print):
@@ -942,7 +1003,9 @@ def main(argv=None):
     t.add_argument("--print", action="store_true", dest="do_print")
 
     n = sub.add_parser("new-app"); n.add_argument("name")
-    n.add_argument("--cpu", required=True, choices=["display", "main"])
+    n.add_argument("--cpu", default=None, choices=["display", "main"],
+                   help="scaffold only one half, and add it to CMakeLists.txt "
+                        "yourself; omit for a display+main pair")
 
     a = p.parse_args(argv)
     if a.cmd == "build":
@@ -961,8 +1024,25 @@ def main(argv=None):
     if a.cmd == "test":
         _run(test_command(), a.do_print); return 0
     if a.cmd == "new-app":
-        d = new_app(a.name, a.cpu)
-        print(f"created {d}\nAdd `add_subdirectory(apps/{d.name})` to CMakeLists.txt")
+        try:
+            d = new_app(a.name, a.cpu, repo_root=REPO_ROOT)
+        except (ValueError, FileExistsError) as e:
+            print(f"fw new-app: {e}", file=sys.stderr)
+            return 2
+        print(f"created {d}")
+        line = f"add_subdirectory(apps/{d.name})"
+        if a.cpu is not None:
+            # One half: placement matters for a display-only app, so a human
+            # decides -- see register_app().
+            print(f"Add `{line}` to CMakeLists.txt")
+            return 0
+        try:
+            added = register_app(d.name, repo_root=REPO_ROOT)
+            print(("added to" if added else "already in") + f" CMakeLists.txt: {line}")
+        except OSError as e:
+            print(f"could not update CMakeLists.txt ({e}); add `{line}` yourself")
+        print(f"next:  python tools/fw.py build {d.name}_main\n"
+              f"       python tools/fw.py flash {d.name}_main")
         return 0
     return 1
 

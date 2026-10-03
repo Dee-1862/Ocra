@@ -70,16 +70,23 @@ most costly.
 | `fw build [app]`                               | configure + build via the `target` preset (Windows) or `target-posix` (macOS/Linux)                     |
 | `fw flash <app>`                               | reboot the app's own CPU into BOOTSEL, then copy its `.uf2`. **Main apps only — see the warning below.** |
 | `fw test`                                      | build + run the host CTest tree, then the `tools/tests/` Python unit tests for `fw.py` itself            |
-| `fw new-app <name> --cpu display\|main`        | scaffold from the matching template                                                                     |
+| `fw new-app <name>`                            | copy `apps/template` -- the display+main pair -- to `apps/<name>/` and add it to `CMakeLists.txt`. What a new app almost always wants |
+| `fw new-app <name>_<cpu> --cpu display\|main`  | scaffold one half only, from the matching template; you add it to `CMakeLists.txt` (see below)          |
 | `fw bootloader`                                | build and flash the display serial bootloader — once per board                                          |
 | `fw bootsel --cpu display\|main` or `--port P` | reboot one CPU into BOOTSEL from the host, no button (`--port` bypasses identification)                 |
 | `fw console [--port P]`                        | attach to a CPU's USB CDC console                                                                       |
 | `fw build [app] --baud N`                      | rebuild both binaries at a different link rate                                                          |
 
-`--print` shows the command instead of running it. After `fw new-app` you must
-add `add_subdirectory(apps/<folder>)` to the top-level `CMakeLists.txt`
-yourself — `<folder>` is the app name **without** its `_display`/`_main`
-suffix, because both halves share one folder. See "App layout" below.
+`--print` shows the command instead of running it. `fw new-app <name>` adds
+`add_subdirectory(apps/<name>)` to the top-level `CMakeLists.txt` itself, under
+`apps/template`: a display+main pair carries its own display image, so where
+its line sits does not matter. The single-half `--cpu` form does **not**,
+because a display-only app must be listed before any main app that embeds it
+(the ordering note above `add_subdirectory(apps/lcd)` in that file) -- so a
+human places it. For that form, add `add_subdirectory(apps/<folder>)` yourself
+(it prints the exact line) -- `<folder>` is the app name **without** its
+`_display`/`_main` suffix, because both halves share one folder. See "App
+layout" below.
 
 ## App layout
 

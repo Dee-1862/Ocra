@@ -31,7 +31,9 @@ contract" in [AGENTS.md](./AGENTS.md).
 ## Quick start
 
 Prerequisites: Pico SDK 2.3.0 and the arm-none-eabi toolchain under
-`~/.pico-sdk`, plus Python 3. Host tests additionally want MSYS2 MinGW GCC on
+`~/.pico-sdk`, plus Python 3 with the packages in `requirements.txt`
+(`python3 -m pip install -r requirements.txt`; on macOS and Linux, do it inside
+a virtual environment). Host tests additionally want MSYS2 MinGW GCC on
 Windows. `fw build` uses the `target` CMake preset on Windows and
 `target-posix` on macOS and Linux; both expect the Raspberry Pi Pico
 extension's layout (`toolchain/15_2_Rel1`, `ninja/v1.13.2`).

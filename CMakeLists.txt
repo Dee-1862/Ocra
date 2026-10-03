@@ -48,8 +48,11 @@ endif()
 
 add_subdirectory(bsp)
 
-# Each app opts in; add new apps here. `fw new-app` scaffolds the directory
-# but does not edit this file.
+# Each app opts in; add new apps here. `fw new-app <name>` (a display+main
+# pair) adds its own line under apps/template, where a pair's position does
+# not matter. The single-half `fw new-app ... --cpu` form leaves it to you,
+# because a display-only app must come first -- see the ordering note above
+# add_subdirectory(apps/lcd).
 # Version string for the bootloader banner and for the display image the
 # main CPU embeds. Evaluated at CONFIGURE time -- which is fine, because
 # `fw build` configures on every invocation.
@@ -121,6 +124,7 @@ add_subdirectory(apps/lcd)
 add_subdirectory(apps/bl)
 
 add_subdirectory(apps/template)
+add_subdirectory(apps/button_lights)
 add_subdirectory(apps/smoke)
 add_subdirectory(apps/bench)
 add_subdirectory(apps/ogvegas)

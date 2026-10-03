@@ -211,6 +211,141 @@ class TestFwCommands(unittest.TestCase):
                 if "fwog_embed_display_image(blinky_main)" in line:
                     self.assertTrue(line.lstrip().startswith("#"), line)
 
+    def test_new_app_pair_copies_both_halves(self):
+        """No --cpu: the whole template, renamed, so the main half carries
+        the display half and the pair can be flashed with <name>_main."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            tpl = self._fake_template(root)
+            (tpl / "display" / "main.c").write_text('DIAG("[template_display] alive\\n");\n')
+
+            dest = fw.new_app("button_lights", repo_root=root)
+
+            self.assertEqual(dest, root / "apps" / "button_lights")
+            self.assertTrue((dest / "display" / "main.c").exists())
+            self.assertTrue((dest / "main" / "main.c").exists())
+            text = (dest / "CMakeLists.txt").read_text()
+            self.assertIn("add_executable(button_lights_display", text)
+            self.assertIn("add_executable(button_lights_main", text)
+            self.assertIn("\nfwog_embed_display_image(button_lights_main)", text)
+            self.assertNotIn("template", text)
+            self.assertIn("[button_lights_display]", (dest / "display" / "main.c").read_text())
+            # The template itself is untouched.
+            self.assertIn("template_main", (tpl / "CMakeLists.txt").read_text())
+            # And `fw flash button_lights_main` looks exactly where it builds.
+            self.assertEqual(fw.app_folder("button_lights_main"), dest.name)
+
+    def test_new_app_pair_rejects_bad_names(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            self._fake_template(root)
+            for bad in ("Button Lights", "button-lights", "2cool", "",
+                        "button_lights_main", "button_lights_display"):
+                with self.assertRaises(ValueError, msg=bad):
+                    fw.new_app(bad, repo_root=root)
+            self.assertEqual(sorted(p.name for p in (root / "apps").iterdir()), ["template"])
+
+    def test_new_app_pair_refuses_to_overwrite(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            self._fake_template(root)
+            (root / "apps" / "taken").mkdir()
+            with self.assertRaises(FileExistsError):
+                fw.new_app("taken", repo_root=root)
+
+    @staticmethod
+    def _fake_top_cmakelists(root):
+        top = root / "CMakeLists.txt"
+        top.write_text("add_subdirectory(apps/lcd)\n"
+                       "add_subdirectory(apps/bl)\n\n"
+                       "add_subdirectory(apps/template)\n"
+                       "add_subdirectory(apps/smoke)\n")
+        return top
+
+    def test_register_app_goes_under_template_once(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            top = self._fake_top_cmakelists(root)
+            self.assertTrue(fw.register_app("button_lights", repo_root=root))
+            self.assertFalse(fw.register_app("button_lights", repo_root=root))
+            lines = top.read_text().splitlines()
+            i = lines.index("add_subdirectory(apps/template)")
+            self.assertEqual(lines[i + 1], "add_subdirectory(apps/button_lights)")
+            self.assertEqual(lines.count("add_subdirectory(apps/button_lights)"), 1)
+            # The display-only apps (lcd, bl) stay ahead of every main app.
+            self.assertLess(lines.index("add_subdirectory(apps/bl)"), i)
+
+    def test_register_app_appends_without_a_template_line(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            top = root / "CMakeLists.txt"
+            top.write_text("add_subdirectory(apps/smoke)")   # no trailing newline
+            fw.register_app("blinky", repo_root=root)
+            self.assertEqual(top.read_text(),
+                             "add_subdirectory(apps/smoke)\nadd_subdirectory(apps/blinky)\n")
+
+    def test_cli_new_app_pair_registers_and_prints_next_steps(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            self._fake_template(root)
+            top = self._fake_top_cmakelists(root)
+            out = io.StringIO()
+            with unittest.mock.patch.object(fw, "REPO_ROOT", root), \
+                    contextlib.redirect_stdout(out):
+                self.assertEqual(fw.main(["new-app", "button_lights"]), 0)
+            self.assertIn("add_subdirectory(apps/button_lights)", top.read_text())
+            text = out.getvalue()
+            self.assertIn("added to CMakeLists.txt", text)
+            self.assertIn("python tools/fw.py build button_lights_main", text)
+            self.assertIn("python tools/fw.py flash button_lights_main", text)
+
+    def test_cli_new_app_pair_with_line_already_present(self):
+        # e.g. someone added the line by hand before running new-app.
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            self._fake_template(root)
+            top = self._fake_top_cmakelists(root)
+            top.write_text(top.read_text() + "add_subdirectory(apps/button_lights)\n")
+            before = top.read_text()
+            out = io.StringIO()
+            with unittest.mock.patch.object(fw, "REPO_ROOT", root), \
+                    contextlib.redirect_stdout(out):
+                self.assertEqual(fw.main(["new-app", "button_lights"]), 0)
+            self.assertEqual(top.read_text(), before)
+            self.assertIn("already in CMakeLists.txt", out.getvalue())
+
+    def test_cli_new_app_half_does_not_touch_cmakelists(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            self._fake_template(root)
+            top = self._fake_top_cmakelists(root)
+            before = top.read_text()
+            out = io.StringIO()
+            with unittest.mock.patch.object(fw, "REPO_ROOT", root), \
+                    contextlib.redirect_stdout(out):
+                self.assertEqual(fw.main(["new-app", "lcd2_display", "--cpu", "display"]), 0)
+            self.assertEqual(top.read_text(), before)
+            self.assertIn("Add `add_subdirectory(apps/lcd2)`", out.getvalue())
+
+    def test_cli_new_app_bad_name_is_one_line_not_a_traceback(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            self._fake_template(root)
+            err = io.StringIO()
+            with unittest.mock.patch.object(fw, "REPO_ROOT", root), \
+                    contextlib.redirect_stderr(err):
+                self.assertEqual(fw.main(["new-app", "Button Lights"]), 2)
+            self.assertTrue(err.getvalue().startswith("fw new-app: "))
+
     def test_scan_rpi_rp2_no_volume(self):
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
