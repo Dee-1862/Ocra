@@ -68,6 +68,14 @@ void rehab_parse(char *line, rehab_msg_t *out) {
         return;
     }
 
+    if (strcmp(verb, "STREAM") == 0) {
+        unsigned hz;
+        if (!parse_uint(token(&rest), 100u, &hz)) { fail(out, "bad-rate"); return; }
+        out->cmd = REHAB_CMD_STREAM;
+        out->hz  = hz;
+        return;
+    }
+
     if (strcmp(verb, "MODE") == 0) {
         char *m = token(&rest);
         if (m != NULL && strcmp(m, "hand") == 0) {

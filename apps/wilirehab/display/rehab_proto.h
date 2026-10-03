@@ -10,6 +10,8 @@
  *   TXT <row> <text...>              OK        (row 0..REHAB_ROWS-1)
  *   BAR <0..100>                     OK        (progress bar along the bottom)
  *   MODE <hand|limb>                 OK
+ *   STREAM <0..100>                  OK        (accelerometer lines per second; 0 = off)
+ *                                    ACC <seq> <t_ms> <x> <y> <z>   (raw int16, see lis3dh.h)
  *                                    BTN <gray|yellow|green|blue|red> <down|up>
  *                                    ERR <reason>
  *
@@ -33,6 +35,7 @@ typedef enum {
     REHAB_CMD_TXT,
     REHAB_CMD_BAR,
     REHAB_CMD_MODE,
+    REHAB_CMD_STREAM,
     REHAB_CMD_ERROR           /* `err` points at the reason */
 } rehab_cmd_t;
 
@@ -40,6 +43,7 @@ typedef struct {
     rehab_cmd_t cmd;
     unsigned    row;          /* TXT */
     unsigned    pct;          /* BAR, 0..100 */
+    unsigned    hz;           /* STREAM, 0..100; 0 turns it off */
     bool        limb_mode;    /* MODE */
     const char *text;         /* TXT: points into the parsed line */
     const char *err;          /* ERROR */

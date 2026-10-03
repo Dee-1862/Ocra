@@ -48,7 +48,7 @@ SCREENS = (
     _screen("calibration", "Calibration", "Move through your comfortable range",
             "Restart", "Prev step", "Capture", "Skip", "Cancel"),
     _screen("play", "Gameplay", "Follow the target",
-            "Pain now", None, "Pause", None, "End"),
+            "Pain now", "Left", "Pause", "Right", "End"),
     _screen("paused", "Paused", "Take your time",
             None, None, "Resume", None, "End"),
     _screen("end", "End session?", "This stops the current session",

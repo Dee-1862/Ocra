@@ -60,6 +60,17 @@ int main(void) {
     m = parse("MODE other", b, sizeof b);
     ASSERT_EQ(m.cmd, REHAB_CMD_ERROR);
 
+    m = parse("STREAM 50", b, sizeof b);
+    ASSERT_EQ(m.cmd, REHAB_CMD_STREAM);
+    ASSERT_EQ(m.hz, 50);
+    m = parse("STREAM 0", b, sizeof b);
+    ASSERT_EQ(m.cmd, REHAB_CMD_STREAM);
+    ASSERT_EQ(m.hz, 0);
+    m = parse("STREAM 101", b, sizeof b);
+    ASSERT_EQ(m.cmd, REHAB_CMD_ERROR);
+    m = parse("STREAM", b, sizeof b);
+    ASSERT_EQ(m.cmd, REHAB_CMD_ERROR);
+
     m = parse("FROB", b, sizeof b);
     ASSERT_EQ(m.cmd, REHAB_CMD_ERROR);
 

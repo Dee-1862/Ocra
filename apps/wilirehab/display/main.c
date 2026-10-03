@@ -28,6 +28,10 @@ static const char *const kBtnName[FWOG_BTN_COUNT] = {
 };
 
 static bool     s_lcd_ready;
+static bool     s_accel_ok;
+static unsigned s_stream_hz;     /* 0 = accelerometer stream off */
+static uint32_t s_next_acc_ms;
+static uint32_t s_acc_seq;
 static uint16_t s_fg, s_bg, s_accent;
 
 static void draw_row(unsigned row, const char *text) {
@@ -62,12 +66,27 @@ static void handle_line(char *line) {
                                : st7789_rgb565(0, 200, 120);
         printf("OK\n");
         return;
+    case REHAB_CMD_STREAM:
+        if (m.hz != 0u && !s_accel_ok) { printf("ERR accel not-initialised\n"); return; }
+        s_stream_hz   = m.hz;
+        s_next_acc_ms = to_ms_since_boot(get_absolute_time());
+        s_acc_seq     = 0u;
+        printf("OK\n");
+        return;
     case REHAB_CMD_ERROR: printf("ERR %s\n", m.err); return;
     }
 }
 
 int main(void) {
     board_init();
+
+    /* Without this the 6 s red hold has no LED countdown (power_poll.c draws
+       it only when ws2812_ready()), so there is nothing to show the hold
+       registered. Same call as the workshop's button-lights exercise. */
+    ws2812_init(pio0, 0);
+
+    lis3dh_init();
+    s_accel_ok = lis3dh_configure(LIS3DH_RANGE_2G);
 
     /* Bounded wait for a host: pico_stdio_usb drops output until DTR. */
 #if FWOG_DIAG == FWOG_DIAG_USB
@@ -93,7 +112,8 @@ int main(void) {
         draw_row(0, "WiliRehab");
         draw_row(1, "waiting for host");
     }
-    DIAG("[wilirehab_display] alive lcd=%s\n", s_lcd_ready ? "ok" : "FAILED");
+    DIAG("[wilirehab_display] alive lcd=%s accel=%s\n", s_lcd_ready ? "ok" : "FAILED",
+         s_accel_ok ? "ok" : "FAILED");
 
     rehab_lines_t lines;
     rehab_lines_init(&lines);
@@ -107,6 +127,23 @@ int main(void) {
                 printf("BTN %s down\n", kBtnName[id]);
             if (pw.buttons.released & FWOG_BTN_BIT(id))
                 printf("BTN %s up\n", kBtnName[id]);
+        }
+
+        /* Raw accelerometer lines, only while the host asked for them. If the
+           host goes away, stop: printf to a USB port nobody reads can block,
+           and this loop also runs the power-off hold. */
+#if FWOG_DIAG == FWOG_DIAG_USB
+        if (s_stream_hz != 0u && !stdio_usb_connected()) s_stream_hz = 0u;
+#endif
+        if (s_stream_hz != 0u && (int32_t)(now - s_next_acc_ms) >= 0) {
+            s_next_acc_ms = now + 1000u / s_stream_hz;
+            lis3dh_sample_t smp;
+            smp.x = smp.y = smp.z = 0x7FFF;   /* no real reading is 0x7FFF */
+            if (lis3dh_process(LIS3DH_MOVE_THRESHOLD_DEFAULT, &smp, NULL) &&
+                (smp.x != 0x7FFF || smp.y != 0x7FFF || smp.z != 0x7FFF)) {
+                printf("ACC %lu %lu %d %d %d\n", (unsigned long)s_acc_seq++,
+                       (unsigned long)now, (int)smp.x, (int)smp.y, (int)smp.z);
+            }
         }
 
         /* Drain whatever the host has sent, without blocking. */

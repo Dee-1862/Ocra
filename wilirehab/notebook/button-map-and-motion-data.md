@@ -16,7 +16,7 @@ The buttons are unlabeled, so **every screen shows a legend row** (text row 7) n
 |---|---|---|---|---|---|
 | Hand select | - | Left hand | **Confirm** | Right hand | Back |
 | Calibration | Restart | Prev step | **Capture** | Skip | Cancel |
-| Gameplay | Pain now | - | **Pause** | - | End |
+| Gameplay | Pain now | Left | **Pause** | Right | End |
 | Paused | - | - | **Resume** | - | End |
 | End session? | - | - | **End now** | - | Keep going |
 | Pain 0 to 10 | +1 | -1 | **Confirm** | +1 | -1 |
