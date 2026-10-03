@@ -39,6 +39,7 @@ firmware arrives over the link inside main's UF2.
 import argparse
 import collections
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -129,8 +130,38 @@ def preset_name(platform=None):
     return "target" if platform == "win32" else "target-posix"
 
 
+def _version_key(name):
+    """Sort key for a ~/.pico-sdk version folder such as v4.3.4: numeric, so
+    v4.10.0 sorts above v4.9.1."""
+    return tuple(int(n) for n in re.findall(r"\d+", name))
+
+
+def cmake_tool(tool="cmake", which=shutil.which, home=None, platform=None):
+    """The cmake (or ctest) to run.
+
+    Whatever is on PATH wins. Otherwise use the copy the Raspberry Pi Pico
+    VS Code extension installed under ~/.pico-sdk/cmake/<version>/bin -- the
+    same ~/.pico-sdk the presets already point at for the SDK, toolchain and
+    Ninja. The extension never puts that folder on PATH, so on a machine set
+    up only through it a bare `cmake` is not found. The newest version folder
+    wins. With neither, the bare name comes back and _run() says what is
+    missing."""
+    if which(tool):
+        return tool
+    platform = sys.platform if platform is None else platform
+    exe = tool + (".exe" if platform == "win32" else "")
+    root = pathlib.Path(home if home is not None else pathlib.Path.home()) / ".pico-sdk" / "cmake"
+    try:
+        found = [d / "bin" / exe for d in root.iterdir() if (d / "bin" / exe).is_file()]
+    except OSError:
+        return tool
+    if not found:
+        return tool
+    return str(max(found, key=lambda p: _version_key(p.parent.parent.name)))
+
+
 def configure_command(baud=None):
-    cmd = ["cmake", "--preset", preset_name()]
+    cmd = [cmake_tool(), "--preset", preset_name()]
     if baud is not None:
         # A cache variable, because both binaries compile it in and must
         # agree. Unlike PICO_BOARD (which must NEVER be passed on a command
@@ -142,7 +173,7 @@ def configure_command(baud=None):
 
 
 def build_command(app):
-    return ["cmake", "--build", "--preset", preset_name(), "--target", app]
+    return [cmake_tool(), "--build", "--preset", preset_name(), "--target", app]
 
 
 def uf2_path(app, override=None):
@@ -311,12 +342,12 @@ def test_command():
     for `fw test` to pass."""
     tests_dir = REPO_ROOT / "tests"
     build_dir = REPO_ROOT / "build-tests"
-    configure = ["cmake", "-S", str(tests_dir), "-B", str(build_dir)]
+    configure = [cmake_tool(), "-S", str(tests_dir), "-B", str(build_dir)]
     configure += _host_toolchain_args()
     return [
         configure,
-        ["cmake", "--build", str(build_dir)],
-        ["ctest", "--test-dir", str(build_dir), "--output-on-failure"],
+        [cmake_tool(), "--build", str(build_dir)],
+        [cmake_tool("ctest"), "--test-dir", str(build_dir), "--output-on-failure"],
         [sys.executable, "-m", "unittest", "discover",
          "-s", str(REPO_ROOT / "tools" / "tests")],
     ]
@@ -384,7 +415,15 @@ def _run(cmds, do_print):
         if do_print:
             print(" ".join(str(x) for x in c))
         else:
-            subprocess.run(c, cwd=REPO_ROOT, check=True)
+            try:
+                subprocess.run(c, cwd=REPO_ROOT, check=True)
+            except FileNotFoundError:
+                if c[0] not in ("cmake", "ctest"):
+                    raise
+                sys.exit(f"fw: `{c[0]}` not found. Install the Raspberry Pi Pico VS Code "
+                         "extension and create a project with Pico SDK 2.3.0 once (it puts "
+                         "CMake under ~/.pico-sdk/cmake, which fw finds by itself), or put "
+                         "CMake 3.21+ on your PATH.")
 
 
 class ConsolePortError(RuntimeError):

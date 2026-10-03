@@ -15,11 +15,53 @@ class TestFwCommands(unittest.TestCase):
         # configures before building. `cmake --build --preset` alone fails
         # with "not a directory" when nothing has been configured yet.
         preset = fw.preset_name()
-        self.assertEqual(fw.configure_command(), ["cmake", "--preset", preset])
+        cmake = fw.cmake_tool()
+        self.assertEqual(fw.configure_command(), [cmake, "--preset", preset])
         self.assertEqual(
             fw.build_command("hello_main"),
-            ["cmake", "--build", "--preset", preset, "--target", "hello_main"],
+            [cmake, "--build", "--preset", preset, "--target", "hello_main"],
         )
+
+    def _pico_cmake_home(self, versions, exe="cmake"):
+        import tempfile
+        home = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(__import__("shutil").rmtree, home)
+        for v in versions:
+            b = home / ".pico-sdk" / "cmake" / v / "bin"
+            b.mkdir(parents=True)
+            for tool in ("cmake", "ctest"):
+                name = tool + (".exe" if exe.endswith(".exe") else "")
+                (b / name).write_text("")
+        return home
+
+    def test_cmake_tool_prefers_path(self):
+        home = self._pico_cmake_home(["v4.3.4"])
+        self.assertEqual(fw.cmake_tool(which=lambda t: "/usr/bin/" + t, home=home), "cmake")
+
+    def test_cmake_tool_falls_back_to_the_pico_extension(self):
+        # The extension installs CMake under ~/.pico-sdk/cmake/<version>/bin
+        # and never adds it to PATH. Newest wins, compared numerically.
+        home = self._pico_cmake_home(["v3.31.5", "v4.9.1", "v4.10.0"])
+        got = fw.cmake_tool(which=lambda t: None, home=home, platform="darwin")
+        self.assertEqual(got, str(home / ".pico-sdk" / "cmake" / "v4.10.0" / "bin" / "cmake"))
+        got = fw.cmake_tool("ctest", which=lambda t: None, home=home, platform="linux")
+        self.assertEqual(got, str(home / ".pico-sdk" / "cmake" / "v4.10.0" / "bin" / "ctest"))
+
+    def test_cmake_tool_windows_looks_for_exe(self):
+        home = self._pico_cmake_home(["v4.3.4"], exe="cmake.exe")
+        got = fw.cmake_tool(which=lambda t: None, home=home, platform="win32")
+        self.assertEqual(got, str(home / ".pico-sdk" / "cmake" / "v4.3.4" / "bin" / "cmake.exe"))
+
+    def test_cmake_tool_with_nothing_installed_returns_the_bare_name(self):
+        home = self._pico_cmake_home([])
+        self.assertEqual(fw.cmake_tool(which=lambda t: None, home=home), "cmake")
+        self.assertEqual(fw.cmake_tool(which=lambda t: None, home=home / "nowhere"), "cmake")
+
+    def test_missing_cmake_explains_itself_instead_of_a_traceback(self):
+        with unittest.mock.patch.object(fw.subprocess, "run", side_effect=FileNotFoundError):
+            with self.assertRaises(SystemExit) as cm:
+                fw._run([["cmake", "--preset", "target-posix"]], do_print=False)
+        self.assertIn("Raspberry Pi Pico VS Code extension", str(cm.exception.code))
 
     def test_preset_name_per_host_family(self):
         # Windows reaches ~/.pico-sdk through %USERPROFILE% and ninja.exe;
@@ -92,9 +134,9 @@ class TestFwCommands(unittest.TestCase):
         # this, nothing in the repo ever ran tools/tests/test_fw.py.
         cmds = fw.test_command()
         self.assertEqual(len(cmds), 4)
-        self.assertEqual(cmds[0][0], "cmake")   # configure
-        self.assertEqual(cmds[1][0], "cmake")   # build
-        self.assertEqual(cmds[2][0], "ctest")   # run
+        self.assertEqual(cmds[0][0], fw.cmake_tool())          # configure
+        self.assertEqual(cmds[1][0], fw.cmake_tool())          # build
+        self.assertEqual(cmds[2][0], fw.cmake_tool("ctest"))   # run
         self.assertEqual(cmds[3][0], sys.executable)
         self.assertIn("unittest", cmds[3])
         self.assertIn("discover", cmds[3])
@@ -242,7 +284,7 @@ class TestBootloaderAndConsole(unittest.TestCase):
         # The existing no-argument behavior must not shift: --baud is an
         # addition, and every other caller passes nothing.
         self.assertEqual(fw.configure_command(),
-                         ["cmake", "--preset", fw.preset_name()])
+                         [fw.cmake_tool(), "--preset", fw.preset_name()])
 
     def test_configure_command_with_baud(self):
         # The link rate is compile-time and shared by BOTH binaries, so it
@@ -250,7 +292,7 @@ class TestBootloaderAndConsole(unittest.TestCase):
         # -DPICO_BOARD -- that one must never appear on a command line.
         self.assertEqual(
             fw.configure_command(8333333),
-            ["cmake", "--preset", fw.preset_name(), "-DFWOG_LINK_BAUD=8333333"],
+            [fw.cmake_tool(), "--preset", fw.preset_name(), "-DFWOG_LINK_BAUD=8333333"],
         )
 
     def test_bootloader_app_targets_the_display_cpu(self):
