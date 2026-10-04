@@ -104,6 +104,17 @@ void rehab_parse(char *line, rehab_msg_t *out) {
         return;
     }
 
+    if (strcmp(verb, "ROT") == 0) {
+        unsigned deg;
+        if (!parse_uint(token(&rest), 180u, &deg) || (deg != 0u && deg != 180u)) {
+            fail(out, "bad-rotation");
+            return;
+        }
+        out->cmd = REHAB_CMD_ROT;
+        out->rot180 = (deg == 180u);
+        return;
+    }
+
     if (strcmp(verb, "BEEP") == 0) {
         unsigned hz, ms, vol;
         if (!parse_uint(token(&rest), 4000u, &hz) || hz < 100u ||

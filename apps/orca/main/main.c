@@ -1,4 +1,4 @@
-/* WiliRehab main-CPU app: brings the display up, then streams a Bosch BMM350
+/* Orca main-CPU app: brings the display up, then streams a Bosch BMM350
  * magnetometer wired to the breakout I2C bus (I2C0, GPIO 16 SDA / 17 SCL).
  *
  * Output goes to THIS CPU's own USB serial port (product ID 2054, not the
@@ -97,7 +97,7 @@ static bool bmm_start(void) {
         if (bmm_read(BMM_REG_CHIP_ID, &id, 1u) && id == BMM_CHIP_ID) {
             found = true;
         } else {
-            DIAG("[wilirehab_main] 0x%02x answered, chip id 0x%02x (want 0x%02x)\n",
+            DIAG("[orca_main] 0x%02x answered, chip id 0x%02x (want 0x%02x)\n",
                  (unsigned)s_addr, (unsigned)id, (unsigned)BMM_CHIP_ID);
         }
     }
@@ -108,10 +108,10 @@ static bool bmm_start(void) {
     /* Magnetic reset: only allowed from suspend, which is where a reset leaves it. */
     if (!bmm_write(BMM_REG_PMU_CMD, BMM_PMU_BR)) return false;
     wait_ms(14);
-    if (!bmm_pmu_is(BMM_PMU_BR)) { DIAG("[wilirehab_main] BMM350: bit reset not accepted\n"); return false; }
+    if (!bmm_pmu_is(BMM_PMU_BR)) { DIAG("[orca_main] BMM350: bit reset not accepted\n"); return false; }
     if (!bmm_write(BMM_REG_PMU_CMD, BMM_PMU_FGR)) return false;
     wait_ms(18);
-    if (!bmm_pmu_is(BMM_PMU_FGR)) { DIAG("[wilirehab_main] BMM350: flux guide reset not accepted\n"); return false; }
+    if (!bmm_pmu_is(BMM_PMU_FGR)) { DIAG("[orca_main] BMM350: flux guide reset not accepted\n"); return false; }
 
     if (!bmm_write(BMM_REG_AGGR_SET, (uint8_t)(BMM_ODR_50HZ | (BMM_AVG_4 << 4)))) return false;
     if (!bmm_write(BMM_REG_PMU_CMD, BMM_PMU_UPD_OAE)) return false;
@@ -119,7 +119,7 @@ static bool bmm_start(void) {
     if (!bmm_write(BMM_REG_AXIS_EN, 0x07u)) return false;
     if (!bmm_write(BMM_REG_PMU_CMD, BMM_PMU_NORMAL)) return false;
     wait_ms(38);
-    DIAG("[wilirehab_main] BMM350 running at 0x%02x, 50 Hz\n", (unsigned)s_addr);
+    DIAG("[orca_main] BMM350 running at 0x%02x, 50 Hz\n", (unsigned)s_addr);
     return true;
 }
 
@@ -138,7 +138,7 @@ static void report_i2c(void) {
     for (size_t i = 0; i < n && i < MAX_FOUND; i++) {
         len += (size_t)snprintf(list + len, sizeof list - len, " 0x%02x", (unsigned)found[i]);
     }
-    DIAG("[wilirehab_main] I2C0 devices (%u):%s\n", (unsigned)n, n ? list : " none");
+    DIAG("[orca_main] I2C0 devices (%u):%s\n", (unsigned)n, n ? list : " none");
 }
 
 int main(void) {
@@ -156,7 +156,7 @@ int main(void) {
         board_watchdog_kick();          /* required: see watchdog.h */
         if (!time_reached(announce_until) && time_reached(next_announce)) {
             next_announce = make_timeout_time_ms(500);
-            DIAG("[wilirehab_main] display: %s\n", fwog_display_result_text(d));
+            DIAG("[orca_main] display: %s\n", fwog_display_result_text(d));
         }
 
         if (!mag_ok) {
@@ -185,7 +185,7 @@ int main(void) {
             }
             seq++;
         } else {
-            DIAG("[wilirehab_main] BMM350 read failed; restarting it\n");
+            DIAG("[orca_main] BMM350 read failed; restarting it\n");
             mag_ok = false;
             next_scan = make_timeout_time_ms(SCAN_EVERY_MS);
         }

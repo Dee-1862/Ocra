@@ -9,7 +9,7 @@ your local host"). So here each stage is its own uAgent with a mailbox, like the
 
 WHAT THIS CHANGES, plainly: in this mode the stages' messages travel THROUGH AGENTVERSE (internet
 needed, a second or two of delay per hop), so the numbers pass through Fetch.ai's servers. Use it
-only with the SIMULATED patient (participant DEMO01), never with a real person's data. The private
+only with the SIMULATED patient (participant DEMO-Maya), never with a real person's data. The private
 default stays agents_main.
 
 One-time setup per agent (the first time only; the connection is remembered):

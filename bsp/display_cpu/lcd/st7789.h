@@ -118,6 +118,13 @@ void st7789_fill_rect(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
                       uint16_t color);
 void st7789_clear(uint16_t color);
 
+/* Turn the picture 180 degrees (true), or back to the normal way up (false), for an OG that is
+ * worn upside down. It only changes how new pixels are written: what is already on the panel is
+ * not redrawn, so a caller clears and redraws afterwards. Flips the column and row address
+ * order (MADCTL MX and MY), which is exactly a half turn. No-op before st7789_ready().
+ * NOT YET OBSERVED ON HARDWARE. */
+void st7789_set_rotation(bool rotate180);
+
 /* True while a fill is still on the wire. False when no fill is in flight,
  * and false on the synchronous fallback path, where fills are already
  * complete by the time they return. */

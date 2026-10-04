@@ -1,4 +1,4 @@
-/* WiliRehab host<->OG line protocol: pure parsing, no SDK, host-tested by
+/* Orca host<->OG line protocol: pure parsing, no SDK, host-tested by
  * tests/test_rehab_proto.c.
  *
  * Text lines over the display CPU's USB CDC port, one command per line, in
@@ -16,16 +16,18 @@
  *   BRIGHT <0..100>                  OK        (backlight percent; the OG never goes below 10)
  *   BEEP <hz> <ms> <vol>             OK        (a square-wave beep: hz 100..4000, ms 1..300,
  *                                              vol 0..10; ERR audio if the speaker did not start)
+ *   ROT <0|180>                      OK        (turn the picture half a turn, for an OG worn upside
+ *                                              down; the screen is cleared, so redraw after it)
  *   STREAM <0..100>                  OK        (accelerometer lines per second; 0 = off)
  *                                    ACC <seq> <t_ms> <x> <y> <z>   (raw int16, see lis3dh.h)
  *                                    BTN <gray|yellow|green|blue|red> <down|up>
  *                                    ERR <reason>
  *
  * The OG is deliberately a dumb terminal: all rehab logic lives on the laptop
- * (wilirehab/host). Keeping it that way means the display CPU runs no policy
+ * (orca/host). Keeping it that way means the display CPU runs no policy
  * that could hang, and it has no watchdog to recover it. */
-#ifndef WILIREHAB_PROTO_H
-#define WILIREHAB_PROTO_H
+#ifndef ORCA_PROTO_H
+#define ORCA_PROTO_H
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -56,6 +58,7 @@ typedef enum {
     REHAB_CMD_IMG,            /* x, y, w, h set; w*h*2 payload bytes follow */
     REHAB_CMD_BRIGHT,         /* pct set */
     REHAB_CMD_BEEP,           /* hz, ms, vol set */
+    REHAB_CMD_ROT,            /* rot180 set */
     REHAB_CMD_ERROR           /* `err` points at the reason */
 } rehab_cmd_t;
 
@@ -67,6 +70,7 @@ typedef struct {
     unsigned    hz;           /* STREAM: 0..100, 0 turns it off. BEEP: 100..4000 */
     unsigned    ms, vol;      /* BEEP: 1..300 and 0..10 */
     bool        limb_mode;    /* MODE */
+    bool        rot180;       /* ROT: true for 180, false for 0 */
     const char *text;         /* TXT: points into the parsed line */
     const char *err;          /* ERROR */
 } rehab_msg_t;

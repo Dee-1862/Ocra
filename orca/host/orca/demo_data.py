@@ -4,12 +4,12 @@
 
 EVERYTHING HERE IS SYNTHETIC. It is made up to tell a story the agents can be shown handling; it is
 not a person and it is not evidence of anything. Say "simulated patient" in anything you record. The
-rows it causes are saved under the participant code DEMO01, and this program REFUSES to run unless
+rows it causes are saved under the participant code DEMO-Maya, and this program REFUSES to run unless
 the agents program is running as a DEMO participant, so it cannot be mixed into a real participant's
 data by accident.
 
 How to run it (agents_main must be started with these three settings, in the same terminal first):
-    $env:ORCA_PARTICIPANT = "DEMO01"      who the rows belong to
+    $env:ORCA_PARTICIPANT = "DEMO-Maya"      who the rows belong to
     $env:ORCA_WINDOW_S    = "2"           the 10 s windows shortened so a session plays fast
     $env:ORCA_SAMPLE_S    = "0.5"         save a reading snapshot every half second
     python -m orca.agents_main
@@ -113,7 +113,7 @@ def guard(status, force: bool = False):
     if not force and not str(status.get("participant", "")).upper().startswith("DEMO"):
         return (f"the agents are running as participant {status.get('participant')!r}, not a DEMO "
                 "one, so simulated data would be saved into that person's record. Restart "
-                "agents_main with $env:ORCA_PARTICIPANT = \"DEMO01\"")
+                "agents_main with $env:ORCA_PARTICIPANT = \"DEMO-Maya\"")
     return None
 
 
@@ -154,7 +154,7 @@ def main(argv=None) -> int:
         source, role, data, sid = final
         ingress.publish(source, role, data, session=sid)
         time.sleep(max(args.gap, 2.0))
-    print("\nDone. Look at the OG's Steps page, and Supabase (participant DEMO01).")
+    print("\nDone. Look at the OG's Steps page, and Supabase (participant DEMO-Maya).")
     return 0
 
 

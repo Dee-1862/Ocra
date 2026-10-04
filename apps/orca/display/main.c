@@ -1,4 +1,4 @@
-/* WiliRehab display app: the OG as feedback screen and button pad.
+/* Orca display app: the OG as feedback screen and button pad.
  *
  * A dumb terminal for the laptop's rehab engine -- see rehab_proto.h for the
  * protocol. It draws what it is told, reports button edges, and does nothing
@@ -132,6 +132,14 @@ static void handle_line(char *line) {
         printf("OK\n");
         return;
     }
+    case REHAB_CMD_ROT:
+        if (s_lcd_ready) {
+            st7789_set_rotation(m.rot180);
+            st7789_clear(s_bg);              /* old pixels are in the old orientation */
+            st7789_dma_wait();
+        }
+        printf("OK\n");
+        return;
     case REHAB_CMD_BEEP:
         if (beep(m.hz, m.ms, m.vol)) printf("OK\n");
         else                         printf("ERR audio\n");
@@ -192,10 +200,10 @@ int main(void) {
         st7789_clear(s_bg);
         st7789_dma_wait();
         board_backlight(255);
-        draw_row(0, "WiliRehab");
+        draw_row(0, "Orca");
         draw_row(1, "waiting for host");
     }
-    DIAG("[wilirehab_display] alive lcd=%s accel=%s audio=%s battery=%s\n",
+    DIAG("[orca_display] alive lcd=%s accel=%s audio=%s battery=%s\n",
          s_lcd_ready ? "ok" : "FAILED", s_accel_ok ? "ok" : "FAILED",
          s_audio_ok ? "ok" : "FAILED", s_bat_ok ? "ok" : "FAILED");
 

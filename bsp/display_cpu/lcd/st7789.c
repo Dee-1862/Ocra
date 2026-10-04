@@ -170,6 +170,16 @@ static void send_config(void) {
     cmd(REG_MADCTL, &madctl, 1);
 }
 
+/* The same landscape orientation turned a half turn: MX (0x40) and MY (0x80) both flipped.
+   0x70 has MX set and MY clear, so this is 0xB0. */
+#define MADCTL_320x240_ROT180 (MADCTL_320x240 ^ 0xC0u)
+
+void st7789_set_rotation(bool rotate180) {
+    if (s_state != ST7789_INIT_DONE) return;
+    const uint8_t madctl = rotate180 ? MADCTL_320x240_ROT180 : MADCTL_320x240;
+    cmd(REG_MADCTL, &madctl, 1);          /* cmd() waits for any fill in flight first */
+}
+
 void st7789_init_begin(void) {
     if (s_state != ST7789_INIT_IDLE) return;
 

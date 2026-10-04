@@ -1,4 +1,4 @@
-/* Host tests for the WiliRehab line protocol (apps/wilirehab/display). */
+/* Host tests for the Orca line protocol (apps/orca/display). */
 #include "test_util.h"
 #include "rehab_proto.h"
 #include <string.h>
@@ -118,6 +118,19 @@ int main(void) {
     m = parse("BEEP 1000 40 11", b, sizeof b);
     ASSERT_EQ(m.cmd, REHAB_CMD_ERROR);
     m = parse("BEEP 1000 40", b, sizeof b);          /* missing the volume */
+    ASSERT_EQ(m.cmd, REHAB_CMD_ERROR);
+
+    m = parse("ROT 180", b, sizeof b);
+    ASSERT_EQ(m.cmd, REHAB_CMD_ROT);
+    ASSERT_TRUE(m.rot180);
+    m = parse("ROT 0", b, sizeof b);
+    ASSERT_EQ(m.cmd, REHAB_CMD_ROT);
+    ASSERT_TRUE(!m.rot180);
+    m = parse("ROT 90", b, sizeof b);               /* only a half turn or none */
+    ASSERT_EQ(m.cmd, REHAB_CMD_ERROR);
+    m = parse("ROT", b, sizeof b);
+    ASSERT_EQ(m.cmd, REHAB_CMD_ERROR);
+    m = parse("ROT 181", b, sizeof b);
     ASSERT_EQ(m.cmd, REHAB_CMD_ERROR);
 
     m = parse("FROB", b, sizeof b);

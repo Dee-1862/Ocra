@@ -20,14 +20,29 @@ past_projects/
 *.csv
 *.jsonl
 
-wilirehab/host/tests/
+orca/host/tests/
 
-# WiliRehab secrets and run-time files: never commit these.
+# Orca secrets and run-time files: never commit these.
+orca/host/.env
+orca/host/agents_status.json
+orca/host/agents_status.tmp
+orca/host/agents_status_*.json
+orca/host/agents_status_*.tmp
+orca/host/agents_history*.json
+orca/host/og_settings.json
+orca/host/sessions/
+
+# TEMPORARY: the same rules for the folder's OLD name (wilirehab/), so secrets and recordings stay
+# ignored until the folder is renamed to orca/ (git mv wilirehab orca). Delete this block afterwards.
 wilirehab/host/.env
-wilirehab/host/agents_status.json
-wilirehab/host/agents_status.tmp
+wilirehab/host/agents_status*.json
+wilirehab/host/agents_status*.tmp
+wilirehab/host/agents_history*.json
+wilirehab/host/agents_queue*.jsonl
 wilirehab/host/og_settings.json
 wilirehab/host/sessions/
+*.sql
+orca/host/devices.json
 
 # Maintainer-only orientation doc. AGENTS.md is the published one.
 AGENTS.local.md

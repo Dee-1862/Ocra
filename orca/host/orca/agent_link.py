@@ -79,8 +79,20 @@ def write_status(snapshot: dict, path=STATUS_FILE) -> None:
     """Replace the status file in one step, so a reader never sees half of it."""
     path = Path(path)
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(snapshot, default=_plain), encoding="utf-8")
-    os.replace(tmp, path)
+    text = json.dumps(snapshot, default=_plain)
+    try:
+        tmp.write_text(text, encoding="utf-8")
+        # On Windows the replace is refused ("Access is denied") while another program has the target
+        # open for reading (the OG shell, an editor, a virus scanner), so try a few times.
+        for attempt in range(5):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                time.sleep(0.05 * (attempt + 1))
+        path.write_text(text, encoding="utf-8")        # last resort: write in place
+    except OSError:
+        pass                                           # the status is for display; never stop an agent for it
 
 
 # When the four stages run as separate programs (agent_stage), each writes its own status file; the
