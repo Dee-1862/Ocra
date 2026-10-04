@@ -44,10 +44,15 @@ By leveraging real-time camera tracking for intact-limb mirroring, the platform 
 - "**Treats** phantom pain" claims clinical effect. the paper plan says this is a technical feasibility paper with no patient testing. Prefer "supports" or "delivers phantom-limb exercises".
 - The older abstract promised an evaluation on the authors with simulated impairments; this draft does not mention one yet.
 
+## Notes added 2026-10-04
+
+[AI-assisted] Discomfort now uses the PSPI pain-expression index (0 to 16) instead of an ad-hoc strain score, with HRV (RMSSD, LF/HF) as supporting signals and heart rate from POS or CHROM. PSPI here is a lower bound from landmark geometry (AU4, AU7, AU10, AU43); AU6 and AU9 are not estimated. HRV is reported separately and never blended into the facial score, because the evidence on it is mixed and a webcam makes it noisy. Details and papers are in `face-signals.md`; the papers are still `lead` until a PDF is opened (rule R4).
+
 ## Changelog
 | Date | Change |
 |---|---|
 | 2026-10-03 | Design log and abstract filed from the hackathon notes; abstract truncated in paste. |
+| 2026-10-04 | Discomfort set to PSPI plus HRV, with POS and CHROM for pulse rate. |
 
 ## Ideas considered and not pursued
 

@@ -1,4 +1,4 @@
-# FREE-WILi setup, board facts and past projects
+# FREE-WILi setup, board facts and example projects
 
 Source: the workshop slides, pasted. Condensed and reordered; steps are as given.
 
@@ -64,7 +64,7 @@ Notch between pins 10 and 12. Top row is even pins, bottom row is odd.
 
 Transcribed from a photo by hand. Check against `docs/hardware/pinmap.md` before wiring anything. For us, the useful part is **I2C0 on pins 8 and 10 with 3.3 V on pin 6**: that is where an external IMU would connect. These pins belong to the **main CPU**, not the display CPU.
 
-## Past projects and their best parts
+## Example FREE-WILi projects and their best parts
 | Project | Key features | Useful to WiliRehab for |
 |---|---|---|
 | thereMINI | Python API, accelerometer | Streaming the OG's accelerometer to a laptop (roadmap Step 2) |

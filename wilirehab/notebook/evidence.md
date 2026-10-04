@@ -28,6 +28,14 @@ For each row the paper needs two things: **one sentence of context** (why the mo
 | Repetitions per session (dose) | successful attempts counted | Number of repetitions in a session is a key rehabilitation dose measure | Lang et al. repetitions per session (named in your notes) | lead | |
 | Fatigue trend | success or reaction time against minutes into the session | Performance falling over a session indicates fatigue | **find** | find | |
 | Pain check-in 0 to 10 | self-report after each round | A numeric pain scale is a standard self-report | **find** | find | |
+| Heart rate from the webcam | POS and CHROM on the mean skin colour | A chrominance or plane-orthogonal projection of RGB recovers pulse rate without a trained model | Wang et al. 2017 (POS); de Haan and Jeanne 2013 (CHROM). See `face-signals.md` | lead | |
+| Facial pain expression (PSPI) | AU4, AU7, AU10, AU43 from landmarks against a rest face | The PSPI index is a reliable, valid measure of pain expression, scored 0 to 16 | Prkachin and Solomon 2008 (*Pain* 139:267); Lucey et al. 2011 (IEEE FG). Our geometric AUs are an unvalidated lower bound | lead | |
+| Why PSPI uses AU4, AU6/7, AU9/10, AU43 | the choice of units in the formula | These four actions carry most of the information about pain expression | Prkachin 1992 (*Pain* 51:297); Prkachin and Solomon 2008 (*Pain* 139:267), as quoted in Lucey et al. 2011 | lead | |
+| AUs from landmark distances | our AU4, AU7, AU10, AU43 proxies | Landmark distances can stand in for action units; person-specific baselines reduce bias | Meawad, Yang, Loy (Glasgow eprint 151491; distance-based PSPI); OpenFace, WACV 2016 and OpenFace 2.0 (shape plus appearance features, per-person median subtraction). Our proxies are unvalidated | lead | |
+| HRV in acute pain | RMSSD and LF/HF against a rest window | HF and RMSSD fall and LF measures rise in acute experimental pain, but results vary by stimulus | Koenig et al. 2014 (*Eur J Pain* 18:301); *Brain Sci* 2022;12:153 | lead | |
+| LF/HF is not sympathetic tone | how we describe LF/HF | At rest LF reflects baroreflex activity, so LF/HF is not a fight-or-flight meter | Shaffer and Ginsberg 2017 (*Front Public Health* 5:258) | lead | |
+| HRV window length | minimum recording for RMSSD and LF | RMSSD about 60 s, LF at least 2 min | Shaffer and Ginsberg 2017 | lead | |
+| HRV from a webcam | RMSSD and LF/HF from rPPG at 30 fps | rPPG HRV is usable at rest with good light and degrades with head motion | Tohma et al. 2021; "Robust Heart Rate Variability Measurement from Facial Videos" (PMC10376629) | lead | |
 
 ## How to turn a row into text
 1. Open the paper. Copy the sentence and the page number into the last column, in your own words plus a short quote under 15 words.
@@ -38,3 +46,4 @@ For each row the paper needs two things: **one sentence of context** (why the mo
 | Date | Change |
 |---|---|
 | 2026-10-03 | Page created from the leads in your pasted notes. Search tool failed; nothing verified. |
+| 2026-10-04 | Heart-rate, PSPI and HRV rows added as leads. PDFs not opened. See `face-signals.md`. |

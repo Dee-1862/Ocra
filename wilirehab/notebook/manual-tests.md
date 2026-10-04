@@ -298,6 +298,16 @@ Each line also shows `turn explains ~N mg`: how much of the sideways movement th
 **Limits you should expect to see:** a slow, smooth slide at steady speed is only felt as it starts and stops, so it can look still; quick short pushes show up better. Moving a hand up and down usually tilts it a little as well, so you may see `turning / tilting` when you meant a slide; keep the board level to test a pure slide. Metal or a magnet nearby also turns the field reading.
 **Report:** paste about 30 lines, and say which line is which movement.
 
+## Card 24: PSPI, HRV and heart-rate maths (no camera, no model)
+**Where:** VS Code terminal, `.venv` active, from the host folder. Needs `numpy` and `pytest` in that environment.
+```
+cd wilirehab/host
+python -m pytest tests/test_pspi.py tests/test_face_strain.py tests/test_hrv.py tests/test_rppg.py -q
+```
+**Expect:** `34 passed`. No download, no webcam, no weight file. These use made-up faces and pulses with known answers, so they prove the arithmetic, not that it works on a real face.
+**If it fails:** paste the first `FAILED` block. `No module named numpy` means the venv is missing numpy (`python -m pip install numpy`). `No module named wilirehab` means the shell is not in `wilirehab/host`.
+**Report:** "Card 24: pass" or the first failure line.
+
 ## Results log
 | Date | Card | Result | Notes |
 |---|---|---|---|

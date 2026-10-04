@@ -262,8 +262,8 @@ flowchart LR
 
     subgraph Laptop processing
         MP[MediaPipe Hands, Pose, Face Mesh]
-        RPPG[rPPG: POS or CHROM via rPPG-Toolbox]
-        STRAIN[Facial strain score from action units]
+        RPPG[rPPG: POS and CHROM, no trained model]
+        STRAIN[PSPI pain-expression index from face landmarks, plus HRV as a supporting signal]
         VOICE[Voice command recognizer]
         HUB[Timestamped data hub]
         FUSE[Fusion: camera + IMU wrist angle, trunk lean]
