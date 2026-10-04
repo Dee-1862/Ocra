@@ -58,8 +58,17 @@ def _chat():
 
 async def send_json(ctx, to: str, payload: dict) -> None:
     _ack, ChatMessage, _end, TextContent = _chat()
-    await ctx.send(to, ChatMessage(timestamp=datetime.now(), msg_id=uuid4(),
-                                   content=[TextContent(type="text", text=json.dumps(payload))]))
+    sent = await ctx.send(to, ChatMessage(timestamp=datetime.now(), msg_id=uuid4(),
+                                          content=[TextContent(type="text", text=json.dumps(payload))]))
+    # Say so when a hand-off fails, and when a finished round is handed on: otherwise a broken link
+    # between two agents is silent and the later agents just never hear anything.
+    state = str(getattr(getattr(sent, "status", None), "value", getattr(sent, "status", "")) or "").lower()
+    kind = payload.get("source")
+    if state == "failed":
+        ctx.logger.warning(f"could not deliver a '{kind}' message to {to[:16]}...: "
+                           f"{getattr(sent, 'detail', '')}")
+    elif kind in ("round", "finding", "decision"):
+        ctx.logger.info(f"handed a '{kind}' message to {to[:16]}... ({state or 'sent'})")
 
 
 def text_of(msg) -> str:
@@ -300,12 +309,19 @@ def install_act(agent, w: Deps) -> None:
             w.say("act", text, "ok")
 
 
+def extra_senders(stage: str) -> set:
+    """Addresses this stage accepts data from IN ADDITION to the stage before it, from
+    ORCA_ALLOWED_SENDERS_<STAGE> in .env (comma separated), for example ORCA_ALLOWED_SENDERS_CHECK."""
+    raw = os.environ.get(f"ORCA_ALLOWED_SENDERS_{stage.upper()}", "")
+    return {a.strip() for a in raw.split(",") if a.strip()}
+
+
 def install_chat(agent, w: Deps, stage: str, data_handler, mailbox: bool) -> None:
     """One chat handler per agent: data from the stage before it, or else a question."""
     from uagents import Context, Protocol
     from uagents_core.contrib.protocols.chat import chat_protocol_spec
     ChatAcknowledgement, ChatMessage, EndSessionContent, TextContent = _chat()
-    allowed = w.upstream(stage)
+    allowed = w.upstream(stage) | extra_senders(stage)
 
     async def on_chat(ctx: Context, sender: str, msg):
         data = read_json(msg)
