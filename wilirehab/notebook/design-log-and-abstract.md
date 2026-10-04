@@ -48,3 +48,14 @@ By leveraging real-time camera tracking for intact-limb mirroring, the platform 
 | Date | Change |
 |---|---|
 | 2026-10-03 | Design log and abstract filed from the hackathon notes; abstract truncated in paste. |
+
+## Ideas considered and not pursued
+
+### Replacing the gyroscope with Wi-Fi signals (2026-10-03)
+Proposed in a pasted text (unsourced, written by another AI tool): use an accelerometer plus Wi-Fi channel state information (CSI) or signal strength (RSSI / fine timing) to stand in for a missing gyroscope.
+Not pursued, because:
+- The OG has no Wi-Fi radio. Its antennas belong to two sub-GHz CC1101 radios, which cannot do 802.11 or CSI. The text's "Wi-Fi from a MHz antenna" mixes the two up.
+- Reading CSI needs a Wi-Fi chip with special firmware or drivers. A normal laptop does not expose it.
+- Wi-Fi timing and signal strength give position to metres, not the centimetres of hand movement.
+- Inferring rotation from CSI phase is a research problem, not an established method, and the text cites nothing.
+- The need was misdescribed: tilt from an accelerometer does not drift (gravity is a fixed reference). What is missing is a gyroscope for fast motion and yaw.

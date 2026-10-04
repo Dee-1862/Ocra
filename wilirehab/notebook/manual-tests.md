@@ -73,7 +73,7 @@ cd wilirehab/host
 python -m pytest tests -q
 python -m wilirehab.mapping_demo
 ```
-**Expect (pytest):** `141 passed`.
+**Expect (pytest):** `158 passed`.
 **Expect (demo):** a window with a screen list on the left and an OG-style screen on the right. Along the bottom of that screen are five coloured circles (gray, yellow, green, blue, red), each with a one or two word label. Unused buttons are dashed circles marked "not used".
 Check on **every** screen (click a screen name, or Left/Right arrows):
 1. The labels match the table in `button-map-and-motion-data.md`.
@@ -94,7 +94,7 @@ python -m wilirehab.mapping_demo --port COM5
 python -m pytest tests -q
 python -m wilirehab.catch_game
 ```
-**Expect (pytest):** `141 passed`.
+**Expect (pytest):** `158 passed`.
 **Expect (game):** the OG-style screen titled "Gameplay". Yellow stars fall inside a box, a green basket sits at the bottom, a counter shows Caught / Missed / Speed. The legend now reads: gray **Pain now**, yellow **Left**, green **Pause**, blue **Right**, red **End**.
 Check, using keys 1 to 5 (2 = Left, 4 = Right):
 1. Left and Right move the basket; each press also plays the ring animation.
@@ -147,7 +147,7 @@ A `sessions/*.jsonl` file should now contain `tilt` lines with a number and `ste
 python -m pytest tests -q
 python -m wilirehab.rhythm_flick
 ```
-**Expect (pytest):** `141 passed`.
+**Expect (pytest):** `158 passed`.
 **Part A, keyboard and buttons only.** Arrows fall one per beat toward a grey line. Press yellow (key 2) for a left arrow and blue (key 4) for a right arrow as it reaches the line.
 **Expect:** a correct press near the line shows HIT and raises Hits; the wrong direction shows WRONG WAY; an arrow that passes unanswered shows MISS. Top-left shows Hits, Misses and Tempo. Get 8 hits in a row: Tempo rises by 5. Miss 3 in a row: it drops by 5. Press gray (Pain now): Tempo drops by 10. The pause, end, pain and summary screens behave as in the catch game.
 **Part B, flick the real OG** (close any console first):
@@ -164,7 +164,7 @@ Hold or strap the OG and flick it left and right as arrows land.
 python -m pytest tests -q
 python -m wilirehab.catch_game --port COM5 --tilt
 ```
-**Expect (pytest):** `141 passed`.
+**Expect (pytest):** `158 passed`.
 **Expect (window):** a third panel on the right (the window is about 1300 px wide) with two tables.
 - **Live sensors** (top): one row per data channel with source, channel, latest value and age. Move the OG: `og acc` shows `x_mg= y_mg= z_mg=` changing and an age near 0.0s, and `og tilt` shows the angle. Press a button: `og button` shows the colour, the action and the screen. Rows older than 2 s turn grey. Sensors we plan but do not have yet show as `not connected` (forearm accelerometer, BNO085 IMU, haptic driver, force sensor).
 - **Timeline** (bottom): newest row first, each with a time in seconds from when the window opened. Fast sensors (acc, tilt) show about 4 rows a second so you can read them; buttons and game events (catch, miss, pain score) show every time. The **freeze** box stops the scrolling so you can read it.
@@ -180,7 +180,7 @@ python -m wilirehab.catch_game --port COM5 --tilt
 python -m pytest tests -q
 python -m wilirehab.devices
 ```
-**Expect (pytest):** `141 passed`.
+**Expect (pytest):** `158 passed`.
 **Expect (devices):** `OG display CPUs found: 2` and a line per OG with its port and USB serial. (If you see 1, the second OG is not enumerating: paste `python -m serial.tools.list_ports -v`.)
 Then assign them:
 ```
@@ -227,7 +227,7 @@ python -m wilirehab.dial_game --port COM5
 python -m pytest tests -q
 python -m wilirehab.launcher
 ```
-**Expect (pytest):** `141 passed`.
+**Expect (pytest):** `158 passed`.
 **Expect (launcher):** a window listing seven games, each with a Start button, a one-line description and the movement it uses, plus the connected OGs and their roles. Only one program can hold an OG's serial port, so **start one game at a time** and close it before opening another that uses the OGs.
 The options box adds command-line options for the next game, for example `--invert-roles left_hand`.
 **Report:** "Card 14: pytest pass/fail; launcher opens ok / problem; device list correct yes / no".
@@ -276,11 +276,59 @@ python -m wilirehab.brick_break --devices devices.json
 python -m wilirehab.rhythm_flick --devices devices.json
 python -m wilirehab.steady_hand --devices devices.json
 ```
-**Expect (pytest):** `141 passed`.
+**Expect (pytest):** `158 passed`.
 **Brick Break:** the paddle should look steadier with a still hand and follow a real tilt with about a third of the delay. The default range is now 18 degrees (it was 12) and the paddle is wider, so each degree moves it less. Rolling the OG sideways should no longer drag the paddle (pitch no longer picks up roll).
 **Rhythm Flick:** one flick should now give one detection. The detector needs a real 8 degree move, ignores the return stroke, and re-arms only after the hand has been still for a moment. In your recorded session the old detector fired 44 times for 23 arrows; the new one fires 14 times, and from about 17 s on they land within about 0.1 s of each arrow's result. **Because of that, a flick must now be a clear, quick move and a pause before the next one.** If real flicks are missed: `--flick-dps 100`.
 **Steady Hand:** the cursor is steadier and less delayed. It still moves because the OG rotates, which is what it measures: a hand movement that does not tilt the OG is invisible to it.
 **Report:** "Card 19: brick steadier yes / no; rhythm one detection per flick yes / no; steady hand better yes / no; real flicks missed yes / no".
+
+## Card 20: Wire the BMM350 magnetometer to the OG and see it on the bus
+This proves the wiring and that the sensor starts. The main-CPU app scans the bus until it finds the BMM350, starts it (register values from Bosch's own driver) and then streams its raw readings. The OG's accelerometer is on the other CPU, so no heading is calculated; Card 21 compares the two sensors.
+**Wiring (OG powered off: unplug USB first).** Connect these four, using the silkscreen labels on both boards:
+
+| BMM350 board | OG side | Use |
+|---|---|---|
+| 3V3 | 3.3 V (OG header pin 6) | **never the 5 V pin** |
+| GND | GND (header pin 19 or 20) | connect this one first |
+| SDA | SDA0 / GPIO16 (header pin 10) | |
+| SCL | SCL0 / GPIO17 (header pin 8) | |
+
+**On the Maestro, read from your close-up photos:** SDA is the pin labelled `GPIO 16 - SDA0`, SCL is `GPIO 17 - SCL0`, 3V3 goes to any pin in the group of three labelled `3.3V`, and GND to any pin in the group labelled `GND`. Before powering up, check that the small **VIO Select** jumper (next to the printed `3.3V` / `5V`) sits on the **3.3V** side. If the labelled SDA0/SCL0 pins turn out to be bare pin tips rather than a plastic header, do not push jumper ends onto them: use the Qwiic socket with a Qwiic cable instead.
+Leave INT and the NC pins unconnected. On the Maestro the same signals are labelled `SDA0 (IO16)` and `SCL0 (IO17)`, with a 3.3 V and a GND pin nearby; use the Maestro's labels rather than counting header pins.
+**Which jumpers.** From your photo the magnetometer has male pins, so at that end use a **female** jumper end. At the OG/Maestro end, use a **female** end if that pin is a male pin, or a **male** end if it is a socket. So female-to-female jumpers join two boards that both have pins, and male-to-female ones join a pin to a socket. The Jambu's blue screw terminals take bare wire, not jumper ends, and its I2C is not on them: it is on the small white Qwiic socket at the top left (labelled QWIIC), which needs a Qwiic cable, not jumpers. So use the Maestro's labelled pins instead. Keep the wires short and double-check each against the labels before plugging USB back in.
+**Build and flash the main app** (from the repo root; flash the `_main` target only):
+```
+python tools/fw.py build wilirehab_main
+python tools/fw.py flash wilirehab_main
+```
+Wait until the OG screen shows `WiliRehab`, then open the **main CPU's** port (product ID 2054, it was COM4; re-list ports first if unsure):
+```
+python tools/fw.py console --port COM4
+```
+**Expect:** first, every two seconds, `[wilirehab_main] I2C0 devices (1): 0x14` (Bosch's driver gives 0x14 or 0x15 as the chip's two addresses), then `[wilirehab_main] BMM350 running at 0x14, 50 Hz`, then 50 lines a second like `MAG 120 6040 812 -1530 2204 50321 1` (sequence, milliseconds, raw X, Y, Z, raw temperature, data-ready flag). Turn the board: the three numbers change. With nothing wired: `I2C0 devices (0): none` forever. If it prints `answered, chip id 0x.. (want 0x33)`, paste that line.
+**If it says none with the sensor wired:** re-check SDA and SCL are not swapped, that 3V3 is on the 3.3 V pin, and that each jumper is seated. Paste the lines you see.
+**Report:** "Card 20: found N device(s), address 0x...".
+
+## Card 21: Magnetometer vs accelerometer tester
+**First, with no hardware at all:**
+```
+cd wilirehab/host
+python -m pytest tests -q
+python -m wilirehab.mag_accel_tester --simulate
+```
+**Expect (pytest):** `158 passed`. **Expect (simulate):** a table of five actions (still, spin, tilt, shake, magnet) with `ok yes` on every row. Read it as the pattern a working pair should show: spinning flat moves only the magnetometer; shaking moves only the accelerometer; tilting moves both; a magnet changes the field *strength* while gravity stays put. It says SIMULATED at the top; it is not your sensors.
+**Then with the real sensors (Card 20 working, MAG lines streaming):** fix the BMM350 board to the OG with tape or a rubber band so they always move together, keep the jumper wires slack, then:
+```
+python -m wilirehab.mag_accel_tester --og-port COM5 --mag-port COM4 --csv-out mag_test.csv
+```
+(COM5 is the OG's display CPU, product ID 2055, the accelerometer; COM4 the main CPU, 2054, the magnetometer. Close any console first: only one program can hold a port.) It prints a sanity line first: gravity should be about 1000 mg and the field roughly 25 to 65 uT (uncompensated, so not exact). Then for each action it says what to do, waits for Enter, and measures for a few seconds. Do exactly what it asks:
+- **still:** do not touch it.
+- **spin:** rotate it flat like a turntable, keeping it level (tilting it makes it look like "tilting").
+- **tilt:** tilt forward, back and sideways, without spinning.
+- **shake:** shake back and forth, keeping it pointing the same way.
+- **magnet:** move a magnet or a steel object near the magnetometer, in and out. Type `s` to skip if you have none.
+**Expect:** a table like the simulated one. The "looked like" column should match "expected". Rows that say NO are informative, not failures of the tester: for example a sloppy spin that also tilts will read as "tilting".
+**Report:** paste the table and the sanity line.
 
 ## Results log
 | Date | Card | Result | Notes |

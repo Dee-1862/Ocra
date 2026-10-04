@@ -30,6 +30,15 @@ def find_og_displays(ports) -> list:
             if p.vid == OG_VID and p.pid == OG_DISPLAY_PID and p.serial_number]
 
 
+OG_MAIN_PID = 0x2054
+
+
+def find_og_mains(ports) -> list:
+    """(device, usb_serial) for every OG *main* CPU (the one the magnetometer is wired to)."""
+    return [(p.device, p.serial_number) for p in ports
+            if p.vid == OG_VID and p.pid == OG_MAIN_PID]
+
+
 def load_config(path) -> dict:
     """role -> usb serial. Empty if the file is missing; ValueError if it is wrong."""
     path = Path(path)
