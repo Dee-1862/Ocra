@@ -1,0 +1,152 @@
+{"t": 1791069845.993, "kind": "wrong", "role": "left_hand", "n": 1, "want": "left", "got": "right"}
+{"t": 1791069846.469, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069846.851, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069847.77, "kind": "miss", "role": null, "n": 2, "want": "left"}
+{"t": 1791069848.296, "kind": "wrong", "role": "left_hand", "n": 3, "want": "right", "got": "left"}
+{"t": 1791069849.123, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069849.479, "kind": "hit", "role": "left_hand", "n": 1, "dir": "left", "err_ms": -281}
+{"t": 1791069849.865, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069850.615, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069850.971, "kind": "wrong", "role": "left_hand", "n": 4, "want": "right", "got": "left"}
+{"t": 1791069851.449, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069852.059, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069852.6, "kind": "hit", "role": "left_hand", "n": 2, "dir": "right", "err_ms": 140}
+{"t": 1791069852.982, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069853.398, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069853.759, "kind": "wrong", "role": "left_hand", "n": 5, "want": "right", "got": "left"}
+{"t": 1791069854.591, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069854.942, "kind": "hit", "role": "left_hand", "n": 3, "dir": "right", "err_ms": -157}
+{"t": 1791069855.722, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069856.102, "kind": "hit", "role": "left_hand", "n": 4, "dir": "right", "err_ms": -344}
+{"t": 1791069856.84, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069857.221, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069858.136, "kind": "miss", "role": null, "n": 6, "want": "left"}
+{"t": 1791069858.712, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069859.097, "kind": "wrong", "role": "left_hand", "n": 7, "want": "right", "got": "left"}
+{"t": 1791069859.514, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069860.043, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069860.398, "kind": "hit", "role": "left_hand", "n": 5, "dir": "right", "err_ms": -63}
+{"t": 1791069860.758, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069861.623, "kind": "wrong", "role": "left_hand", "n": 8, "want": "right", "got": "left"}
+{"t": 1791069861.975, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069863.048, "kind": "wrong", "role": "left_hand", "n": 9, "want": "left", "got": "right"}
+{"t": 1791069863.462, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069864.462, "kind": "hit", "role": "left_hand", "n": 6, "dir": "right", "err_ms": 32}
+{"t": 1791069864.815, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069865.679, "kind": "wrong", "role": "left_hand", "n": 10, "want": "right", "got": "left"}
+{"t": 1791069866.064, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069866.963, "kind": "hit", "role": "left_hand", "n": 7, "dir": "right", "err_ms": -139}
+{"t": 1791069867.317, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069868.04, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069868.422, "kind": "hit", "role": "left_hand", "n": 8, "dir": "right", "err_ms": 0}
+{"t": 1791069868.805, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069869.698, "kind": "wrong", "role": "left_hand", "n": 11, "want": "left", "got": "right"}
+{"t": 1791069870.051, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069870.451, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069870.964, "kind": "hit", "role": "left_hand", "n": 9, "dir": "left", "err_ms": -125}
+{"t": 1791069871.329, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069872.125, "kind": "hit", "role": "left_hand", "n": 10, "dir": "right", "err_ms": -296}
+{"t": 1791069872.567, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069873.328, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069873.773, "kind": "wrong", "role": "left_hand", "n": 12, "want": "right", "got": "left"}
+{"t": 1791069874.186, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069874.999, "kind": "hit", "role": "left_hand", "n": 11, "dir": "left", "err_ms": -108}
+{"t": 1791069875.394, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069876.163, "kind": "hit", "role": "left_hand", "n": 12, "dir": "left", "err_ms": -265}
+{"t": 1791069876.553, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069877.382, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069877.751, "kind": "wrong", "role": "left_hand", "n": 13, "want": "left", "got": "right"}
+{"t": 1791069878.164, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069878.944, "kind": "hit", "role": "left_hand", "n": 13, "dir": "right", "err_ms": -188}
+{"t": 1791069879.312, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069880.175, "kind": "hit", "role": "left_hand", "n": 14, "dir": "right", "err_ms": -264}
+{"t": 1791069880.512, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069881.022, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069882.131, "kind": "miss", "role": null, "n": 14, "want": "left"}
+{"t": 1791069886.59, "kind": "miss", "role": null, "n": 15, "want": "left"}
+{"t": 1791069887.923, "kind": "miss", "role": null, "n": 16, "want": "right"}
+{"t": 1791069888.129, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069889.279, "kind": "miss", "role": null, "n": 17, "want": "right"}
+{"t": 1791069890.752, "kind": "miss", "role": null, "n": 18, "want": "left"}
+{"t": 1791069892.218, "kind": "miss", "role": null, "n": 19, "want": "left"}
+{"t": 1791069893.863, "kind": "miss", "role": null, "n": 20, "want": "right"}
+{"t": 1791069895.535, "kind": "miss", "role": null, "n": 21, "want": "left"}
+{"t": 1791069896.395, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069896.767, "kind": "wrong", "role": "left_hand", "n": 22, "want": "left", "got": "right"}
+{"t": 1791069897.395, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069897.778, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069898.209, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069898.558, "kind": "hit", "role": "left_hand", "n": 15, "dir": "right", "err_ms": -63}
+{"t": 1791069898.926, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069899.74, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069900.189, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069900.842, "kind": "wrong", "role": "left_hand", "n": 23, "want": "right", "got": "left"}
+{"t": 1791069901.512, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069902.992, "kind": "miss", "role": null, "n": 24, "want": "left"}
+{"t": 1791069904.091, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069904.569, "kind": "hit", "role": "left_hand", "n": 16, "dir": "left", "err_ms": -31}
+{"t": 1791069906.346, "kind": "hit", "role": "left_hand", "n": 17, "dir": "left", "err_ms": -281}
+{"t": 1791069907.176, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069908.474, "kind": "wrong", "role": "left_hand", "n": 25, "want": "left", "got": "right"}
+{"t": 1791069909.021, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069909.36, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069909.732, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069910.206, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069910.623, "kind": "wrong", "role": "left_hand", "n": 26, "want": "left", "got": "right"}
+{"t": 1791069911.287, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069911.675, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069912.047, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069912.829, "kind": "hit", "role": "left_hand", "n": 18, "dir": "right", "err_ms": 233}
+{"t": 1791069913.282, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069913.646, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069914.051, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069914.448, "kind": "hit", "role": "left_hand", "n": 19, "dir": "right", "err_ms": -141}
+{"t": 1791069916.966, "kind": "miss", "role": null, "n": 27, "want": "left"}
+{"t": 1791069918.986, "kind": "miss", "role": null, "n": 28, "want": "left"}
+{"t": 1791069921.013, "kind": "miss", "role": null, "n": 29, "want": "left"}
+{"t": 1791069921.342, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069922.389, "kind": "hit", "role": "left_hand", "n": 20, "dir": "left", "err_ms": -204}
+{"t": 1791069922.744, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069924.267, "kind": "hit", "role": "left_hand", "n": 21, "dir": "left", "err_ms": -343}
+{"t": 1791069924.657, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069926.121, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069926.507, "kind": "wrong", "role": "left_hand", "n": 30, "want": "right", "got": "left"}
+{"t": 1791069926.903, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069928.256, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069928.672, "kind": "wrong", "role": "left_hand", "n": 31, "want": "left", "got": "right"}
+{"t": 1791069929.025, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069929.42, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069930.478, "kind": "wrong", "role": "left_hand", "n": 32, "want": "left", "got": "right"}
+{"t": 1791069930.847, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069931.201, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069932.244, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069932.598, "kind": "hit", "role": "left_hand", "n": 22, "dir": "right", "err_ms": -31}
+{"t": 1791069933.046, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069934.326, "kind": "hit", "role": "left_hand", "n": 23, "dir": "right", "err_ms": -281}
+{"t": 1791069934.695, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069936.241, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069936.644, "kind": "wrong", "role": "left_hand", "n": 33, "want": "left", "got": "right"}
+{"t": 1791069937.062, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069938.375, "kind": "hit", "role": "left_hand", "n": 24, "dir": "left", "err_ms": -218}
+{"t": 1791069938.747, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069939.113, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069940.279, "kind": "hit", "role": "left_hand", "n": 25, "dir": "left", "err_ms": -327}
+{"t": 1791069940.634, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069942.236, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069942.982, "kind": "miss", "role": null, "n": 34, "want": "right"}
+{"t": 1791069943.084, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069944.384, "kind": "hit", "role": "left_hand", "n": 26, "dir": "right", "err_ms": -218}
+{"t": 1791069944.834, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069946.469, "kind": "wrong", "role": "left_hand", "n": 35, "want": "right", "got": "left"}
+{"t": 1791069946.84, "kind": "flick", "role": "left_hand", "dir": "left", "result": "none"}
+{"t": 1791069948.136, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069948.986, "kind": "miss", "role": null, "n": 36, "want": "left"}
+{"t": 1791069949.018, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069950.384, "kind": "wrong", "role": "left_hand", "n": 37, "want": "left", "got": "right"}
+{"t": 1791069950.752, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}
+{"t": 1791069952.986, "kind": "miss", "role": null, "n": 38, "want": "left"}
+{"t": 1791069954.957, "kind": "miss", "role": null, "n": 39, "want": "left"}
+{"t": 1791069956.977, "kind": "hit", "role": "left_hand", "n": 27, "dir": "left", "err_ms": 343}
+{"t": 1791069958.992, "kind": "miss", "role": null, "n": 40, "want": "right"}
+{"t": 1791069960.984, "kind": "miss", "role": null, "n": 41, "want": "left"}
+{"t": 1791069961.328, "kind": "flick", "role": "left_hand", "dir": "right", "result": "none"}

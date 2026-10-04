@@ -1,0 +1,13 @@
+{"t": 1791078913.745, "kind": "prompt", "color": "green"}
+{"t": 1791078916.763, "kind": "too_slow", "color": "green"}
+{"t": 1791078918.217, "kind": "prompt", "color": "yellow"}
+{"t": 1791078918.993, "kind": "reaction", "role": "left_hand", "color": "yellow", "ms": 764}
+{"t": 1791078920.114, "kind": "prompt", "color": "red"}
+{"t": 1791078922.082, "kind": "reaction", "role": "left_hand", "color": "red", "ms": 1969}
+{"t": 1791078924.337, "kind": "prompt", "color": "blue"}
+{"t": 1791078925.488, "kind": "reaction", "role": "left_hand", "color": "blue", "ms": 1139}
+{"t": 1791078926.767, "kind": "prompt", "color": "yellow"}
+{"t": 1791078929.535, "kind": "too_slow", "color": "yellow"}
+{"t": 1791078930.973, "kind": "prompt", "color": "red"}
+{"t": 1791078933.94, "kind": "too_slow", "color": "red"}
+{"t": 1791078952.182, "kind": "prompt", "color": "gray"}

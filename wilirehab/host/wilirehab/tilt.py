@@ -22,6 +22,8 @@ import math
 from collections import deque
 from statistics import median
 
+from .smoothing import Hysteresis, OneEuroFilter
+
 MG_PER_DIGIT = 4        # +-2 g, normal mode
 RAW_SHIFT = 6
 
@@ -39,11 +41,22 @@ def magnitude_mg(x: float, y: float, z: float) -> float:
 
 
 def tilt_deg(x_mg: float, y_mg: float, z_mg: float, axis: str = "y") -> float:
-    """Tilt in degrees of the chosen sideways axis against gravity."""
+    """Elevation in degrees of the chosen OG axis above the horizontal.
+
+    This is asin(axis reading / total), not atan2(axis, z). The difference
+    matters when the OG is also tilted the other way: atan2 divides by z, which
+    shrinks as the OG rolls, so rolling it leaked into the pitch reading by up
+    to about 5 degrees in recorded sessions. The elevation of an axis does not
+    change when the OG turns about that same axis, so roll and pitch no longer
+    disturb each other. For a tilt about one axis only the two formulas agree.
+    """
     if axis not in ("x", "y"):
         raise ValueError("axis must be 'x' or 'y'")
     side = x_mg if axis == "x" else y_mg
-    return math.degrees(math.atan2(side, z_mg))
+    total = math.sqrt(x_mg * x_mg + y_mg * y_mg + z_mg * z_mg)
+    if total < 1e-6:
+        return 0.0
+    return math.degrees(math.asin(max(-1.0, min(1.0, side / total))))
 
 
 def to_position(angle_deg: float, left_deg: float = DEFAULT_RANGE_DEG,
@@ -75,11 +88,21 @@ class TiltTracker:
     """
 
     def __init__(self, axis: str = "y", invert: bool = False,
-                 alpha: float = 0.12, median_len: int = 5):
+                 alpha: float = 0.12, median_len: int = 5,
+                 hold_shaky: bool = True, euro=None, band_deg: float = 0.0):
+        """euro=(min_cutoff_hz, beta) replaces the fixed smoothing (alpha) with a
+        1-euro filter: just as calm at rest, but about a third of the delay.
+        band_deg adds a dead band: the output ignores moves smaller than that."""
+        # hold_shaky=False is for flick detection, where fast motion is the
+        # signal and must not be ignored.
+        self.hold_shaky = hold_shaky
         self.axis = axis
         self.sign = -1.0 if invert else 1.0
         self.alpha = alpha
         self._recent = deque(maxlen=max(1, median_len))
+        self._euro = OneEuroFilter(*euro) if euro else None
+        self._band = Hysteresis(band_deg)
+        self._auto_t = 0.0
         self._smooth = None
         self._zero = None
         self._want_zero = True
@@ -90,24 +113,39 @@ class TiltTracker:
         self._want_zero = True
 
     @property
+    def absolute(self):
+        """The filtered angle without the neutral subtracted (None before the first
+        sample). Speed is measured on this so pressing 'zero' cannot fake a spike."""
+        return self._smooth
+
+    @property
     def steady(self) -> bool:
         """True when the total acceleration is close to 1 g, i.e. mostly gravity.
         Large departures mean shaking or a bad read, and the angle is then unreliable."""
         return 700.0 <= self.last_magnitude_mg <= 1300.0
 
-    def update(self, raw_x: int, raw_y: int, raw_z: int) -> float:
-        """Feed one raw sample; returns the filtered angle relative to neutral."""
+    def update(self, raw_x: int, raw_y: int, raw_z: int, t=None) -> float:
+        """Feed one raw sample; returns the filtered angle relative to neutral.
+
+        `t` is the sample time in seconds (the OG's own clock is best); the
+        1-euro filter needs it. Without it, 50 samples a second is assumed."""
         x, y, z = raw_to_mg(raw_x), raw_to_mg(raw_y), raw_to_mg(raw_z)
         self.last_magnitude_mg = magnitude_mg(x, y, z)
+        self._auto_t += 0.02
+        when = self._auto_t if t is None else t
 
-        if self._smooth is None or self.steady:
+        if self._smooth is None or self.steady or not self.hold_shaky:
             self._recent.append(self.sign * tilt_deg(x, y, z, self.axis))
             target = median(self._recent)
-            self._smooth = target if self._smooth is None else (
-                self._smooth + self.alpha * (target - self._smooth))
+            if self._euro is not None:
+                self._smooth = self._euro(when, target)
+            else:
+                self._smooth = target if self._smooth is None else (
+                    self._smooth + self.alpha * (target - self._smooth))
         # else: shaky, hold the previous value.
 
+        shown = self._band(self._smooth)
         if self._want_zero:
-            self._zero = self._smooth
+            self._zero = shown
             self._want_zero = False
-        return self._smooth - self._zero
+        return shown - self._zero

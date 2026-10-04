@@ -124,10 +124,11 @@ def test_steady_flags_shaking():
     assert not t.steady
 
 
-def test_parse_button_down_only():
+def test_parse_button_press_and_release():
     assert og_link.parse_line("BTN green down") == ("press", "green")
-    assert og_link.parse_line("BTN green up") is None
+    assert og_link.parse_line("BTN green up") == ("release", "green")
     assert og_link.parse_line("BTN purple down") is None
+    assert og_link.parse_line("BTN green sideways") is None
 
 
 def test_parse_acc():

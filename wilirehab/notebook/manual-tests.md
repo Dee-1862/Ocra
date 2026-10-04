@@ -73,7 +73,7 @@ cd wilirehab/host
 python -m pytest tests -q
 python -m wilirehab.mapping_demo
 ```
-**Expect (pytest):** `25 passed`.
+**Expect (pytest):** `141 passed`.
 **Expect (demo):** a window with a screen list on the left and an OG-style screen on the right. Along the bottom of that screen are five coloured circles (gray, yellow, green, blue, red), each with a one or two word label. Unused buttons are dashed circles marked "not used".
 Check on **every** screen (click a screen name, or Left/Right arrows):
 1. The labels match the table in `button-map-and-motion-data.md`.
@@ -94,7 +94,7 @@ python -m wilirehab.mapping_demo --port COM5
 python -m pytest tests -q
 python -m wilirehab.catch_game
 ```
-**Expect (pytest):** `25 passed`.
+**Expect (pytest):** `141 passed`.
 **Expect (game):** the OG-style screen titled "Gameplay". Yellow stars fall inside a box, a green basket sits at the bottom, a counter shows Caught / Missed / Speed. The legend now reads: gray **Pain now**, yellow **Left**, green **Pause**, blue **Right**, red **End**.
 Check, using keys 1 to 5 (2 = Left, 4 = Right):
 1. Left and Right move the basket; each press also plays the ring animation.
@@ -140,6 +140,147 @@ Hold or strap the OG in a comfortable pose, then press **z** in the window to se
 In this mode yellow and blue (Left/Right) do nothing; the other buttons still work.
 A `sessions/*.jsonl` file should now contain `tilt` lines with a number and `steady`.
 **Report:** "Card 7: part A ok / output; part B ok / which flag needed".
+
+## Card 8: Rhythm Flick
+**Where:** `wilirehab/host`, `.venv` active. No reflash needed (uses the same `STREAM` as Card 7).
+```
+python -m pytest tests -q
+python -m wilirehab.rhythm_flick
+```
+**Expect (pytest):** `141 passed`.
+**Part A, keyboard and buttons only.** Arrows fall one per beat toward a grey line. Press yellow (key 2) for a left arrow and blue (key 4) for a right arrow as it reaches the line.
+**Expect:** a correct press near the line shows HIT and raises Hits; the wrong direction shows WRONG WAY; an arrow that passes unanswered shows MISS. Top-left shows Hits, Misses and Tempo. Get 8 hits in a row: Tempo rises by 5. Miss 3 in a row: it drops by 5. Press gray (Pain now): Tempo drops by 10. The pause, end, pain and summary screens behave as in the catch game.
+**Part B, flick the real OG** (close any console first):
+```
+python -m wilirehab.rhythm_flick --port COM5
+```
+Hold or strap the OG and flick it left and right as arrows land.
+**Fixes:** left and right swapped: add `--invert`. No flicks register: add `--flick-dps 90` (lower is easier). Flicks fire by accident: raise `--flick-dps 220`. A different tilt direction works instead of the sideways one: add `--axis x`. Up and down too: add `--dirs all` (keys u / d work without the OG; `--invert-fwd` swaps them).
+**Report:** "Card 8: part A ok / problem; part B ok / which flags I needed".
+
+## Card 9: Data sidebar (catch game and Rhythm Flick)
+**Where:** `wilirehab/host`, `.venv` active. No reflash needed.
+```
+python -m pytest tests -q
+python -m wilirehab.catch_game --port COM5 --tilt
+```
+**Expect (pytest):** `141 passed`.
+**Expect (window):** a third panel on the right (the window is about 1300 px wide) with two tables.
+- **Live sensors** (top): one row per data channel with source, channel, latest value and age. Move the OG: `og acc` shows `x_mg= y_mg= z_mg=` changing and an age near 0.0s, and `og tilt` shows the angle. Press a button: `og button` shows the colour, the action and the screen. Rows older than 2 s turn grey. Sensors we plan but do not have yet show as `not connected` (forearm accelerometer, BNO085 IMU, haptic driver, force sensor).
+- **Timeline** (bottom): newest row first, each with a time in seconds from when the window opened. Fast sensors (acc, tilt) show about 4 rows a second so you can read them; buttons and game events (catch, miss, pain score) show every time. The **freeze** box stops the scrolling so you can read it.
+**Check the timestamps line up:** press a button, then look at its timeline row and at the game's log line under the game; the times should agree to within a fraction of a second.
+**The CSV:** close the window, then open `wilirehab/host/sessions/data-<time>.csv`. It has every row at full rate (about 50 acc rows a second), with columns `t_s, source, channel, dev_ms, fields`. `dev_ms` is the OG's own clock for OG rows.
+**Without the OG:** `python -m wilirehab.catch_game` works too. Only keyboard and game rows appear; `og acc` and `og tilt` are simply absent.
+**If the window is too wide for your screen:** tell me the resolution.
+**Report:** "Card 9: pytest pass/fail; live table ok / problem; timeline ok / problem; CSV ok / problem".
+
+## Card 10: Two OGs, one per hand (assign the roles)
+**Where:** `wilirehab/host`, `.venv` active, both OGs plugged in and running the WiliRehab firmware (flash the second one the same way as the first, one at a time: AGENTS.md says only one CPU in BOOTSEL at a time).
+```
+python -m pytest tests -q
+python -m wilirehab.devices
+```
+**Expect (pytest):** `141 passed`.
+**Expect (devices):** `OG display CPUs found: 2` and a line per OG with its port and USB serial. (If you see 1, the second OG is not enumerating: paste `python -m serial.tools.list_ports -v`.)
+Then assign them:
+```
+python -m wilirehab.devices --setup
+```
+It says "Press any button on the left hand OG now...". Press a button on the OG you want as the left hand, then on the other when asked for the right hand.
+**Expect:** `-> left_hand = serial ...`, `-> right_hand = serial ...`, `Saved devices.json`, and the final list showing a COM port for each role. Run `python -m wilirehab.devices` again after unplugging and re-plugging both: the roles should follow the OGs even if the COM numbers changed.
+**If a role says "No press seen":** the OG is not printing button lines (not running the WiliRehab firmware), or another program holds its port.
+**Report:** "Card 10: found N OGs; setup ok / problem; roles still correct after re-plug yes / no".
+
+## Card 11: Rhythm Flick with two hands
+**Where:** `wilirehab/host`. No reflash.
+```
+python -m wilirehab.rhythm_flick --devices devices.json
+```
+**Expect:** two lanes, LEFT and RIGHT. Arrows fall in a lane with a small L or R on the block. Flick the matching hand's OG sideways as the arrow reaches the line: HIT. Flick the wrong hand's OG: `WRONG HAND` (no penalty). The data panel's **hand** column shows L and R on the rows, and the live table has an `og acc` and `og tilt` row for each hand.
+**Fixes:** a hand's left and right are swapped: `--invert-roles left_hand` (or `right_hand`, or both comma separated). Nothing registers: `--flick-dps 90`. Fires by accident: `--flick-dps 220`. Without OGs the buttons and keys 2 / 4 flick for either hand.
+Finish a round (red, then green on "End session?", pain, confirm). **Expect on the summary:** a small table with Range, Peak deg/s and Hit rate for L and R, a ratio, and which side is weaker.
+**Report:** "Card 11: lanes ok / problem; hand tagging ok / problem; symmetry table ok / problem; flags needed".
+
+## Card 12: Mirror hand
+**Where:** `wilirehab/host`.
+```
+python -m wilirehab.mirror_hand --devices devices.json --driver right_hand
+```
+**Expect:** two drawn hands. The right one (green) turns as you tilt the right-hand OG; the left one (yellow) is its mirror image, turning the opposite way. If the left OG is worn, a dashed grey ghost shows its real tilt on top of the yellow hand, and the top line shows `Match NN%` and the error in degrees. The window shows angles magnified 2x; the table shows the real ones.
+**Check:** `--driver left_hand` swaps which side drives. Without OGs, yellow/blue (keys 2 / 4) nudge the driver hand by 5 degrees.
+**If the ghost moves the wrong way against the yellow hand:** `--invert-roles left_hand`.
+**Report:** "Card 12: drawing ok / problem; ghost and match ok / problem; mirror direction right / flipped".
+
+## Card 13: Dial
+**Where:** `wilirehab/host`. Rest the forearm flat (a towel roll), OG on the back of the hand or forearm, screen up.
+```
+python -m wilirehab.dial_game --port COM5
+```
+(or `--devices devices.json --driver left_hand`). Press **z** first for neutral.
+**Expect:** a semicircle dial. A yellow marker and band show the target; the green needle follows the OG's roll. Hold the needle inside the band for 1.5 s to score (a bar fills while you hold). After each success the band gets 1 degree narrower; a target not reached in 15 s widens it by 2.
+**Fixes:** needle moves the wrong way: `--invert-roles right_hand`. No movement but another tilt moves it: `--axis x`. Range too large or small: `--dial-range 30`.
+**Report:** "Card 13: needle ok / problem; holding and scoring ok / problem; flags needed".
+
+## Card 14: Launcher and the new games (no reflash needed)
+**Where:** `wilirehab/host`, `.venv` active, numpy installed (`pip install numpy`; it is probably there already).
+```
+python -m pytest tests -q
+python -m wilirehab.launcher
+```
+**Expect (pytest):** `141 passed`.
+**Expect (launcher):** a window listing seven games, each with a Start button, a one-line description and the movement it uses, plus the connected OGs and their roles. Only one program can hold an OG's serial port, so **start one game at a time** and close it before opening another that uses the OGs.
+The options box adds command-line options for the next game, for example `--invert-roles left_hand`.
+**Report:** "Card 14: pytest pass/fail; launcher opens ok / problem; device list correct yes / no".
+
+## Card 15: Brick Break
+**Where:** `wilirehab/host`.
+```
+python -m wilirehab.brick_break --devices devices.json
+```
+Tilt the driver OG forward and back with the forearm flat; press **z** first for neutral.
+**Expect:** a wall of coloured bricks, a ball and a blue paddle. The paddle moves left and right as you tilt forward and back (the top line says `Steer: wrist up/down (pitch)`). The ball breaks bricks, speeds up after each cleared wall and slows after a drop. Yellow / blue (keys 2 / 4) nudge the paddle without an OG.
+**Fixes:** paddle goes the wrong way: `--invert-fwd-roles right_hand`. Nothing moves but a sideways tilt does: `--movement roll`, or `--axis x`. Range too big or small: tilt fully each way and press **l** and **r**.
+**Report:** "Card 15: paddle follows pitch yes / no; ball and bricks behave yes / problem; flags needed".
+
+## Card 16: Steady Hand
+```
+python -m wilirehab.steady_hand --devices devices.json
+```
+**Expect:** a crosshair field, a yellow ring and a white cursor. The cursor moves sideways with roll and up/down with pitch. Hold it inside the ring (it turns green and a bar fills for 2 s); a new ring appears. The top line shows Roll, Pitch and, after a few seconds of play, `Tremor N mg`. The ring narrows after each success.
+**Without an OG:** keys 2 / 4 nudge roll, keys u / d nudge pitch.
+**Fixes:** cursor moves the wrong way up/down: `--invert-fwd-roles right_hand`; sideways: `--invert-roles right_hand`.
+**Report:** "Card 16: both axes move the cursor yes / no; tremor value appears yes / no".
+
+## Card 17: Colour Reflex
+```
+python -m wilirehab.color_reflex --devices devices.json
+```
+**Expect:** five coloured circles, dim, then one lights up with a ring. Press that colour's button on an OG (or key 1 to 5). The reaction time in ms appears; the wrong colour shows WRONG COLOUR; no press in time shows TOO SLOW; pressing before anything lights shows TOO EARLY. The legend at the bottom names the five colours. Key **p** pauses and **e** ends (all five buttons are answers).
+After ending (e, then green, then pain), **expect on the summary:** median reaction, correct count, left/right medians (when pressed on different OGs), and the median time buttons were held.
+**Report:** "Card 17: prompts and timing ok / problem; left/right medians appear yes / no".
+
+## Card 18: The new summary lines (any game)
+After finishing any game session, the summary should now show, below the game's own lines:
+- a **trend** line, for example `Success rate trend  steady` or `improving +4.0 %/min`, or `needs a longer session` for sessions under about 30 seconds or with too few points;
+- a **tremor** line (`Tremor 4-12 Hz  L 2.1  R 1.8 mg`) once there are a few seconds of OG data;
+- with both OGs, the left/right table with **Roll range** and **Pitch range** rows.
+The CSV in `sessions/` has `tremor`, `press` and `tilt` rows (with `roll_deg` and `pitch_deg`).
+**Report:** "Card 18: trend line ok / problem; tremor line ok / problem; pitch row appears yes / no".
+
+## Card 19: Noise fixes (Brick Break, Rhythm Flick, Steady Hand)
+Changed after your recorded sessions showed the problems; compare with how they felt before. No reflash.
+```
+cd wilirehab/host
+python -m pytest tests -q
+python -m wilirehab.brick_break --devices devices.json
+python -m wilirehab.rhythm_flick --devices devices.json
+python -m wilirehab.steady_hand --devices devices.json
+```
+**Expect (pytest):** `141 passed`.
+**Brick Break:** the paddle should look steadier with a still hand and follow a real tilt with about a third of the delay. The default range is now 18 degrees (it was 12) and the paddle is wider, so each degree moves it less. Rolling the OG sideways should no longer drag the paddle (pitch no longer picks up roll).
+**Rhythm Flick:** one flick should now give one detection. The detector needs a real 8 degree move, ignores the return stroke, and re-arms only after the hand has been still for a moment. In your recorded session the old detector fired 44 times for 23 arrows; the new one fires 14 times, and from about 17 s on they land within about 0.1 s of each arrow's result. **Because of that, a flick must now be a clear, quick move and a pause before the next one.** If real flicks are missed: `--flick-dps 100`.
+**Steady Hand:** the cursor is steadier and less delayed. It still moves because the OG rotates, which is what it measures: a hand movement that does not tilt the OG is invisible to it.
+**Report:** "Card 19: brick steadier yes / no; rhythm one detection per flick yes / no; steady hand better yes / no; real flicks missed yes / no".
 
 ## Results log
 | Date | Card | Result | Notes |

@@ -1,0 +1,167 @@
+"""Brick Break: a ball bounces off a paddle and breaks a wall of bricks.
+
+The paddle moves left and right by tilting the OG. By default that is **pitch**
+(tilt forward and back; with the forearm resting flat this is wrist flexion and
+extension), so it trains a different movement from the catch game and the dial,
+which use roll (forearm rotation). `--movement roll` switches it to roll.
+
+Built on the catch game (screens, legend, pause / pain / summary flow, OG links,
+data table, numbers-only log). Only the play area differs.
+
+Controls: tilt the driver OG. yellow / blue (keys 2 / 4) also move the paddle
+without an OG. z sets neutral; l / r set your own tilt range, as in the catch game.
+Gray "Pain now" slows the ball.
+
+The ball slows after a drop and speeds up each time the wall is cleared.
+
+Run from wilirehab/host:
+    python -m wilirehab.brick_break
+    python -m wilirehab.brick_break --port COM5
+    python -m wilirehab.brick_break --devices devices.json --driver left_hand --movement roll
+"""
+from __future__ import annotations
+
+import tkinter as tk
+
+from .breakout import MIN_SPEED, Breakout
+from .catch_game import FIELD, TILT_SLEW, GameApp, build_game_args
+from .cli import parse_roles, resolve_ports
+from .mapping_demo import DIM, FG, PANEL, blend
+from .tilt import to_position
+
+ROW_COLORS = ("#ef4444", "#f5c400", "#22c55e")
+BALL = "#e6edf3"
+PADDLE = "#3b82f6"
+MOVEMENT_NAME = {"pitch": "wrist up/down (pitch)", "roll": "forearm rotation (roll)"}
+
+
+class BrickApp(GameApp):
+    TITLE = "WiliRehab brick break"
+    PERF = ("Paddle catch rate", "%", 100.0, 2.0, True)
+
+    def __init__(self, root: tk.Tk, ports: dict, log_dir, axis="y", invert_roles=(),
+                 invert_fwd_roles=(), driver="right_hand", movement="pitch",
+                 range_deg=18.0, speed=170.0):
+        self.movement = movement
+        self._start_speed = speed
+        super().__init__(root, ports, log_dir, tilt=False, axis=axis,
+                         invert_roles=invert_roles, range_deg=range_deg, driver=driver,
+                         stream=True, invert_fwd_roles=invert_fwd_roles)
+
+    # ---- round state ---------------------------------------------------
+
+    def _new_round(self) -> None:
+        super()._new_round()
+        self.game = Breakout(speed=self._start_speed)
+        self.paddle_hits = 0
+
+    def _end_fields(self) -> dict:
+        return {"bricks": self.game.score, "drops": self.game.drops,
+                "levels": self.game.levels}
+
+    # ---- input ---------------------------------------------------------
+
+    def _angle(self):
+        """The driver's tilt on the chosen movement, or None before any OG data."""
+        source = self.pitch_angles if self.movement == "pitch" else self.angles
+        return source.get(self.driver)
+
+    def _on_key(self, event) -> None:
+        if event.char in ("l", "r"):
+            angle = self._angle()
+            if angle is None:
+                self.status.configure(text="No OG data yet; tilt it first")
+                return
+            self.tilt_angle = angle          # _set_extreme reads this
+            self._set_extreme(event.char)
+            return
+        super()._on_key(event)
+
+    def _apply(self, label) -> None:
+        if self.screen.key == "play" and label == "Pain now":
+            self.game.speed = max(MIN_SPEED, self.game.speed * 0.8)
+        super()._apply(label)
+
+    # ---- the game ------------------------------------------------------
+
+    def _advance(self, dt: float) -> None:
+        self.play_seconds += dt
+        angle = self._angle()
+        if angle is not None:                # with an OG the tilt sets the paddle
+            target = to_position(angle, self.left_deg, self.right_deg)
+            step = TILT_SLEW * dt
+            self.bx += max(-step, min(step, target - self.bx))
+        # (without an OG, the base class's Left / Right presses move self.bx)
+        for event in self.game.step(dt, self.bx * self.game.width):
+            if event == "paddle":
+                self.paddle_hits += 1
+                self._attempt(self.driver, True)
+                self._perf(1)
+            elif event == "lost":
+                self._attempt(self.driver, False)
+                self._perf(0)
+                self.session.record("drop", n=self.game.drops)
+            elif event == "brick":
+                self.session.record("brick", n=self.game.score)
+            elif event == "cleared":
+                self.session.record("level", n=self.game.levels)
+
+    # ---- drawing -------------------------------------------------------
+
+    def _draw_field(self, dim: bool) -> None:
+        c = self.canvas
+        x0, y0, x1, y1 = FIELD
+        g = self.game
+
+        def shade(color):
+            return blend(color, PANEL, 0.6) if dim else color
+
+        c.create_rectangle(x0, y0, x1, y1, outline="#30363d", tags="body")
+        for bx0, by0, bx1, by1, row in g.bricks:
+            c.create_rectangle(x0 + bx0, y0 + by0, x0 + bx1, y0 + by1,
+                               fill=shade(ROW_COLORS[row % 3]), outline="", tags="body")
+        half = g.paddle_w / 2
+        py = y0 + g.paddle_y
+        c.create_rectangle(x0 + g.paddle_x - half, py - g.paddle_h / 2,
+                           x0 + g.paddle_x + half, py + g.paddle_h / 2,
+                           fill=shade(PADDLE), outline="", tags="body")
+        r = g.ball_r
+        c.create_oval(x0 + g.ball_x - r, y0 + g.ball_y - r, x0 + g.ball_x + r,
+                      y0 + g.ball_y + r, fill=shade(BALL), outline="", tags="body")
+        c.create_text(x0 + 8, y0 + 4, anchor="nw", fill=DIM, font=("Segoe UI", 10),
+                      text=f"Bricks {g.score}   Drops {g.drops}   Level {g.levels + 1}   "
+                           f"Steer: {MOVEMENT_NAME[self.movement]}", tags="body")
+        if self.screen.key == "paused":
+            c.create_text((x0 + x1) / 2, (y0 + y1) / 2, text="PAUSED", fill=FG,
+                          font=("Segoe UI", 34, "bold"), tags="body")
+
+    def _summary_lines(self) -> list:
+        g = self.game
+        return [
+            f"Bricks broken  {g.score}",
+            f"Paddle hits  {self.paddle_hits}",
+            f"Balls dropped  {g.drops}",
+            f"Walls cleared  {g.levels}",
+            f"Pain score  {self.last_pain if self.last_pain is not None else '-'}",
+        ]
+
+
+def main() -> None:
+    ap = build_game_args("WiliRehab brick break")
+    ap.add_argument("--movement", choices=("pitch", "roll"), default="pitch",
+                    help="pitch = wrist up/down moves the paddle (default); roll = forearm rotation")
+    ap.add_argument("--range-deg", type=float, default=18.0,
+                    help="tilt that reaches each edge (default 18; larger = steadier paddle)")
+    ap.add_argument("--speed", type=float, default=170.0, help="starting ball speed, px/s")
+    args = ap.parse_args()
+    ports = resolve_ports(args)
+    root = tk.Tk()
+    BrickApp(root, ports, args.log_dir, axis=args.axis,
+             invert_roles=parse_roles(args.invert_roles),
+             invert_fwd_roles=parse_roles(args.invert_fwd_roles), driver=args.driver,
+             movement=args.movement, range_deg=args.range_deg, speed=args.speed)
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()

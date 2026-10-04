@@ -1,4 +1,4 @@
-"""Catch game: the first game, steered by the OG buttons.
+"""Catch game, and the base class every other game builds on.
 
 Stars fall; move the basket under them. It is the button-map demo with a game
 drawn in its body area, so the legend, ring animation, banner, log and the
@@ -12,12 +12,19 @@ Difficulty adapts in two small steps so it stays easy to follow:
   - every 5 catches in a row it speeds up a little
   - a miss, or a "Pain now" press, slows it down
 
-Only numbers are logged (session.py), to sessions/session-<time>.jsonl.
+One or two OGs (left_hand, right_hand). Every OG's tilt is measured per hand;
+with both present the summary adds a symmetry table. Only the *driver* OG
+steers this game. A button on either OG acts as that button.
+
+Only numbers are logged: sessions/session-<time>.jsonl (events) and
+sessions/data-<time>.csv (every reading, with its hand).
 
 Run from wilirehab/host:
     python -m wilirehab.catch_game
-    python -m wilirehab.catch_game --port COM5     # steer with the real OG
-Keys while testing without the OG: 1 gray, 2 yellow, 3 green, 4 blue, 5 red.
+    python -m wilirehab.catch_game --port COM5 --tilt        # one OG steers
+    python -m wilirehab.catch_game --tilt --driver left_hand  # two OGs, left steers
+Keys while testing without the OG: 1 gray, 2 yellow, 3 green, 4 blue, 5 red;
+z sets neutral; l / r set your own left / right tilt range (tilt mode).
 """
 from __future__ import annotations
 
@@ -26,13 +33,20 @@ import queue
 import random
 import time
 import tkinter as tk
+from collections import deque
 from pathlib import Path
+from statistics import median
 
+from .bilateral import HandStats, format_row, symmetry_report
 from .button_map import SCREENS, SCREENS_BY_KEY
+from .cli import add_common_args, parse_roles, resolve_ports
+from .data_panel import DataPanel
+from .datatable import DataTable
 from .mapping_demo import App, BG, DIM, FG, PANEL, W, blend
+from .measures import describe_trend, tremor_band, trend_per_minute
 from .og_link import OgLink
 from .session import SessionLog
-from .tilt import TiltTracker, to_position
+from .tilt import TiltTracker, raw_to_mg, to_position
 
 FIELD = (24, 104, W - 24, 282)    # x0, y0, x1, y1 on the canvas
 STEP = 0.10                       # basket move per press, as a fraction of the field
@@ -56,34 +70,103 @@ NEXT = {
 }
 
 
+class TeeLog:
+    """The session log, which also feeds the live data table.
+
+    Every game event (catch, miss, hit, pain score, ...) lands in both, so the
+    call sites do not change. "tilt" is skipped here because the table gets a
+    richer tilt row straight from the sensor. A `role=` field names the hand.
+    """
+
+    SKIP = {"tilt"}
+
+    def __init__(self, log: SessionLog, data: DataTable):
+        self.log = log
+        self.data = data
+
+    def record(self, kind: str, **fields) -> None:
+        self.log.record(kind, **fields)
+        if kind not in self.SKIP:
+            self.data.add("game", kind, **fields)
+
+    def close(self) -> None:
+        self.log.close()
+
+
 class GameApp(App):
-    def __init__(self, root: tk.Tk, port, log_dir, tilt=False, axis="y",
-                 invert=False, range_deg=12.0):
-        # Set up before App.__init__, which renders straight away.
+    TITLE = "WiliRehab catch game"
+    # What the summary's fatigue line tracks, or None for no trend line:
+    # (label, unit, multiply values by, "steady" below this per minute, higher is better).
+    PERF = ("Success rate", "%", 100.0, 2.0, True)
+
+    def __init__(self, root: tk.Tk, ports: dict, log_dir, tilt=False, axis="y",
+                 invert_roles=(), range_deg=12.0, driver="right_hand", stream=None,
+                 invert_fwd_roles=()):
+        # Everything below is set before App.__init__, which renders straight away.
+        self.roles = tuple(ports)
+        self.driver = driver if driver in ports else (next(iter(ports)) if ports else driver)
+        self.invert_roles = set(invert_roles)
+        # The steady angles that steer games: median of 3, then a 1-euro filter (as calm as
+        # the old fixed smoothing at rest, about a third of the delay), then a 0.4 degree
+        # dead band so a still hand does not flicker.
+        steady = dict(median_len=3, euro=(0.5, 0.02), band_deg=0.4)
+        self.slow = {r: TiltTracker(axis=axis, invert=r in self.invert_roles, **steady)
+                     for r in self.roles}
+        # Light filtering for speed and flicks; no shaky-hold, fast motion is the signal.
+        self.fast = {r: TiltTracker(axis=axis, invert=r in self.invert_roles, alpha=0.5,
+                                    median_len=3, hold_shaky=False)
+                     for r in self.roles}
+        # Pitch = tilt forward/back, the other accelerometer axis. With the forearm flat
+        # that is wrist flexion/extension; roll (above) is forearm rotation.
+        fwd_axis = "x" if axis == "y" else "y"
+        self.pitch = {r: TiltTracker(axis=fwd_axis, invert=r in set(invert_fwd_roles), **steady)
+                      for r in self.roles}
+        self.pitch_fast = {r: TiltTracker(axis=fwd_axis, invert=r in set(invert_fwd_roles),
+                                          alpha=0.5, median_len=3, hold_shaky=False)
+                           for r in self.roles}
+        self.pitch_angles: dict = {}
+        self._null_tracker = TiltTracker(axis=axis)
+        self._acc_mg = {r: deque(maxlen=256) for r in self.roles}    # for tremor
+        self._acc_ms = {r: deque(maxlen=256) for r in self.roles}
+        self._tremor_next = {r: 0.0 for r in self.roles}
+        self._down_at: dict = {}
+        self._press_role = None
+        self.angles: dict = {}
+        self._statuses: dict = {}
+        self.tilt_mode = tilt
+        self._stream = tilt if stream is None else stream
+        self.links: dict = {}
         self._new_round()
         self.last_pain = None
-        self.link = None
-        self.tilt_mode = tilt
-        self.tracker = TiltTracker(axis=axis, invert=invert)
         self.left_deg = range_deg       # full-left and full-right tilt; press l / r to set
         self.right_deg = range_deg
         self.target_x = 0.5
         self.tilt_angle = 0.0
         self._last_tilt_log = 0.0
         Path(log_dir).mkdir(parents=True, exist_ok=True)
-        self.session = SessionLog(Path(log_dir) / time.strftime("session-%Y%m%d-%H%M%S.jsonl"))
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        self.data = DataTable(Path(log_dir) / f"data-{stamp}.csv")
+        self.session = TeeLog(SessionLog(Path(log_dir) / f"session-{stamp}.jsonl"), self.data)
         self._last = time.monotonic()
-        # The base class would start its own button-only reader; we use OgLink,
-        # which also carries tilt and can send commands.
+        # The base class would start its own button-only reader; OgLink also
+        # carries tilt and can send commands.
         super().__init__(root, None)
-        root.title("WiliRehab catch game")
-        if port:
-            self.link = OgLink(port, self.events,
-                               on_connect=("STREAM 50",) if tilt else ())
-            self.link.start()
+        root.title(self.TITLE)
+        self.panel = DataPanel(root, self.data)
+        self.panel.grid(row=0, column=2, sticky="ns", padx=(0, 12), pady=12)
+        for role, port in ports.items():
+            link = OgLink(port, self.events, role=role,
+                          on_connect=("STREAM 50",) if self._stream else ())
+            link.start()
+            self.links[role] = link
         self._go("play")
         root.protocol("WM_DELETE_WINDOW", self._close)
         root.after(TICK_MS, self._game_tick)
+
+    @property
+    def tracker(self) -> TiltTracker:
+        """The driver OG's steady tracker (a harmless dummy when there is none)."""
+        return self.slow.get(self.driver, self._null_tracker)
 
     # ---- round state -------------------------------------------------
 
@@ -98,46 +181,119 @@ class GameApp(App):
         self.gap = BASE_GAP
         self.since_spawn = 0.0
         self.play_seconds = 0.0
+        self.stats = {r: HandStats() for r in self.roles}
+        self.perf_points: list = []                 # (play seconds, value) for the trend
+        self.tremor_rms = {r: [] for r in self.roles}
+        self.held_ms = {r: [] for r in self.roles}  # how long each button was held
+
+    def _perf(self, value: float) -> None:
+        """Note one performance value (what PERF says it means) for the trend line."""
+        self.perf_points.append((self.play_seconds, float(value)))
+
+    def _attempt(self, role, hit: bool) -> None:
+        if role in self.stats:
+            self.stats[role].attempt(hit)
 
     def _go(self, key: str) -> None:
         self._select(SCREENS.index(SCREENS_BY_KEY[key]))
 
     def _close(self) -> None:
-        if self.link:
-            self.link.close()
+        for link in self.links.values():
+            link.close()
         self.session.close()
+        self.data.close()
         self.root.destroy()
 
-    # ---- input from the OG -------------------------------------------
+    def press(self, button: str, source: str) -> None:
+        # source is "click", "key", or "OG:<role>" for a real button.
+        role = source.split(":", 1)[1] if source.startswith("OG:") else None
+        self._press_role = role          # games read this in _apply to know which hand
+        if role:
+            self._down_at[(role, button)] = time.monotonic()
+        self.data.add("og" if role else "keyboard", "button", role=role,
+                      color=button, action=self.screen.label(button) or "-",
+                      screen=self.screen.key)
+        super().press(button, source)
+
+    # ---- input from the OGs ------------------------------------------
 
     def _poll(self) -> None:
         try:
             while True:
-                kind, value = self.events.get_nowait()
+                kind, value, role = self.events.get_nowait()
                 if kind == "press":
-                    self.press(value, "OG")
+                    self.press(value, f"OG:{role}")
+                elif kind == "release":
+                    self._on_release(value, role)
                 elif kind == "acc":
-                    self._on_acc(value)
+                    seq, t_ms, x, y, z = value
+                    self.data.add("og", "acc", device_ms=t_ms, role=role, seq=seq,
+                                  x_mg=raw_to_mg(x), y_mg=raw_to_mg(y), z_mg=raw_to_mg(z))
+                    self._on_acc(value, role)
                 else:
-                    self.status.configure(text=value)
+                    self._statuses[role] = value
+                    self.status.configure(
+                        text="\n".join(f"{r}: {s}" for r, s in self._statuses.items()))
         except queue.Empty:
             pass
         self.root.after(20, self._poll)
 
-    def _on_acc(self, sample) -> None:
-        _seq, _t_ms, x, y, z = sample
-        self.tilt_angle = self.tracker.update(x, y, z)
+    def _on_release(self, button: str, role) -> None:
+        """A button came up: how long was it held? (A rough finger-release measure.)"""
+        started = self._down_at.pop((role, button), None)
+        if started is None:
+            return
+        ms = int((time.monotonic() - started) * 1000)
+        if self.screen.key == "play":
+            self.held_ms[role].append(ms)
+        self.data.add("og", "press", role=role, color=button, held_ms=ms)
+
+    def _check_tremor(self, role, t_ms: int) -> None:
+        """Every 2 s of play, the 4-12 Hz shake strength from the last ~5 s."""
+        if self.screen.key != "play" or t_ms < self._tremor_next[role]:
+            return
+        self._tremor_next[role] = t_ms + 2000
+        result = tremor_band(list(self._acc_mg[role]), list(self._acc_ms[role]))
+        if result:
+            rms, peak_hz = result
+            self.tremor_rms[role].append(rms)
+            self.data.add("og", "tremor", role=role, rms_mg=round(rms, 1),
+                          peak_hz=round(peak_hz, 1))
+
+    def _on_acc(self, sample, role) -> None:
+        _seq, t_ms, x, y, z = sample
+        slow_tracker, fast_tracker = self.slow[role], self.fast[role]
+        when = t_ms / 1000.0                    # the OG's own clock, not USB arrival time
+        slow = slow_tracker.update(x, y, z, when)
+        fast_tracker.update(x, y, z)
+        pitch = self.pitch[role].update(x, y, z, when)
+        self.pitch_fast[role].update(x, y, z)
+        self.angles[role] = slow
+        self.pitch_angles[role] = pitch
+        self._acc_mg[role].append((raw_to_mg(x), raw_to_mg(y), raw_to_mg(z)))
+        self._acc_ms[role].append(t_ms)
+        if self.screen.key == "play":
+            self.stats[role].update(t_ms / 1000.0, slow, fast_tracker.absolute,
+                                    pitch, self.pitch_fast[role].absolute)
+        self._check_tremor(role, t_ms)
+        self.data.add("og", "tilt", role=role, roll_deg=round(slow, 1),
+                      pitch_deg=round(pitch, 1), steady=slow_tracker.steady)
+        if role != self.driver:
+            return
+        self.tilt_angle = slow
         if self.tilt_mode and self.screen.key == "play":
-            self.target_x = to_position(self.tilt_angle, self.left_deg, self.right_deg)
+            self.target_x = to_position(slow, self.left_deg, self.right_deg)
             now = time.monotonic()
             if now - self._last_tilt_log >= 0.1:        # 10 lines a second at most
                 self._last_tilt_log = now
-                self.session.record("tilt", deg=round(self.tilt_angle, 1),
-                                    steady=self.tracker.steady)
+                self.session.record("tilt", deg=round(slow, 1),
+                                    steady=slow_tracker.steady)
 
     def _on_key(self, event) -> None:
         if event.char == "z":
-            self.tracker.zero()             # next sample becomes neutral
+            for tracker in (*self.slow.values(), *self.fast.values(),
+                            *self.pitch.values(), *self.pitch_fast.values()):
+                tracker.zero()              # next sample becomes neutral
             self.status.configure(text="Neutral set to the current pose")
             return
         if event.char in ("l", "r") and self.tilt_mode:
@@ -192,8 +348,7 @@ class GameApp(App):
                 self.session.record(label.lower(), at_s=round(self.play_seconds, 1))
 
         if key == "end" and label == "End now":
-            self.session.record("session_end", caught=self.caught, missed=self.missed,
-                                seconds=round(self.play_seconds, 1))
+            self._end_session()
             self._go("pain")
             return
         if key == "summary" and label == "Done":
@@ -204,6 +359,47 @@ class GameApp(App):
         target = NEXT.get((key, label))
         if target:
             self._go(target)
+
+    def _end_fields(self) -> dict:
+        """Game-specific numbers for the session_end row; games override this."""
+        return {"caught": self.caught, "missed": self.missed}
+
+    def _end_session(self) -> None:
+        """Log the headline numbers, one row per hand, then the comparison."""
+        self.session.record("session_end", seconds=round(self.play_seconds, 1),
+                            **self._end_fields())
+        for role, s in self.stats.items():
+            tremor = self.tremor_rms.get(role)
+            held = self.held_ms.get(role)
+            self.session.record(
+                "hand", role=role, samples=s.samples,
+                roll_range_deg=round(s.range_deg, 1),
+                pitch_range_deg=round(s.pitch_range_deg, 1),
+                peak_dps=round(s.peak_dps, 1), hits=s.hits, attempts=s.attempts,
+                tremor_rms_mg=round(median(tremor), 1) if tremor else None,
+                press_ms=int(median(held)) if held else None)
+        slope = self._trend_slope()
+        if slope is not None:
+            self.session.record("trend", label=self.PERF[0], per_min=round(slope, 2))
+        report = symmetry_report(self.stats)
+        if report:
+            ratio = {r.name: r for r in report}
+            pitch = ratio.get("Pitch range")
+            self.session.record(
+                "symmetry",
+                roll_ratio=_round(ratio["Roll range"].ratio),
+                pitch_ratio=_round(pitch.ratio) if pitch else None,
+                speed_ratio=_round(ratio["Peak deg/s"].ratio),
+                hit_ratio=_round(ratio["Hit rate %"].ratio),
+                weaker_roll=ratio["Roll range"].weaker,
+                weaker_speed=ratio["Peak deg/s"].weaker)
+
+    def _trend_slope(self):
+        """Change of the PERF value per minute over the session, or None."""
+        if not self.PERF or not self.perf_points:
+            return None
+        scale = self.PERF[2]
+        return trend_per_minute([(t, v * scale) for t, v in self.perf_points])
 
     # ---- the game ----------------------------------------------------
 
@@ -239,6 +435,8 @@ class GameApp(App):
     def _on_catch(self) -> None:
         self.caught += 1
         self.streak += 1
+        self._attempt(self.driver, True)
+        self._perf(1)
         if self.streak % 5 == 0:
             self.speed = min(MAX_SPEED, self.speed * 1.1)
             self.gap = max(MIN_GAP, self.gap * 0.95)
@@ -247,6 +445,8 @@ class GameApp(App):
     def _on_miss(self) -> None:
         self.missed += 1
         self.streak = 0
+        self._attempt(self.driver, False)
+        self._perf(0)
         self.speed = max(MIN_SPEED, self.speed * 0.9)
         self.gap = min(MAX_GAP, self.gap * 1.05)
         self.session.record("miss", n=self.missed, speed=round(self.speed, 2))
@@ -293,37 +493,73 @@ class GameApp(App):
             c.create_text((x0 + x1) / 2, (y0 + y1) / 2, text="PAUSED", fill=FG,
                           font=("Segoe UI", 34, "bold"), tags="body")
 
-    def _draw_summary(self) -> None:
-        lines = [
+    def _summary_lines(self) -> list:
+        return [
             f"Caught  {self.caught}",
             f"Missed  {self.missed}",
             f"Pain-now presses  {self.pain_events}",
             f"Pain score  {self.last_pain if self.last_pain is not None else '-'}",
             f"Time  {self.play_seconds:.0f} s",
         ]
+
+    def _extra_lines(self) -> list:
+        """Lines every game gets: the fatigue trend and the tremor strength."""
+        lines = []
+        if self.PERF:
+            label, unit, _scale, flat, better_high = self.PERF
+            slope = self._trend_slope()
+            text = describe_trend(slope, flat, unit, better_high)
+            lines.append(f"{label} trend  {text if text else 'needs a longer session'}")
+        shown = {r: median(v) for r, v in self.tremor_rms.items() if v}
+        if shown:
+            short = {"left_hand": "L", "right_hand": "R"}
+            parts = "  ".join(f"{short.get(r, r)} {v:.1f}" for r, v in shown.items())
+            lines.append(f"Tremor 4-12 Hz  {parts} mg")
+        return lines
+
+    def _draw_summary(self) -> None:
+        lines = self._summary_lines() + self._extra_lines()
         for i, text in enumerate(lines):
-            self.canvas.create_text(W / 2, 140 + 30 * i, text=text, fill=FG,
-                                    font=("Segoe UI", 18), tags="body")
+            self.canvas.create_text(W / 2, 108 + 18 * i, text=text, fill=FG,
+                                    font=("Segoe UI", 13), tags="body")
+        report = symmetry_report(self.stats)
+        if not report:
+            return
+        y = 108 + 18 * len(lines) + 6
+        head = f"{'':<11}{'L':>6}{'R':>6}{'ratio':>6}"
+        self.canvas.create_text(W / 2, y, text=head, fill=DIM,
+                                font=("Consolas", 11), tags="body")
+        for i, row in enumerate(report):
+            self.canvas.create_text(W / 2, y + 17 * (i + 1), text=format_row(row),
+                                    fill=FG, font=("Consolas", 11), tags="body")
+
+
+def _round(v):
+    return None if v is None else round(v, 2)
+
+
+def build_game_args(description: str):
+    ap = argparse.ArgumentParser(description=description)
+    add_common_args(ap)
+    return ap
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="WiliRehab catch game")
-    ap.add_argument("--port", help="serial port of the OG display CPU, e.g. COM5")
-    ap.add_argument("--log-dir", default="sessions", help="where session logs go")
+    ap = build_game_args("WiliRehab catch game")
     ap.add_argument("--tilt", action="store_true",
-                    help="steer by tilting the OG (needs --port); press z to set neutral")
-    ap.add_argument("--axis", choices=("x", "y"), default="y",
-                    help="which OG axis is sideways when it is worn (default y)")
-    ap.add_argument("--invert", action="store_true", help="flip left and right")
+                    help="steer by tilting the driver OG; press z to set neutral")
     ap.add_argument("--range-deg", type=float, default=12.0,
                     help="starting tilt that reaches each edge (default 12); "
                          "press l and r in the window to set your own")
     args = ap.parse_args()
-    if args.tilt and not args.port:
-        ap.error("--tilt needs --port, e.g. --port COM5")
+    ports = resolve_ports(args)
+    if args.tilt and not ports:
+        ap.error("--tilt needs an OG: pass --port COM5 or set up devices.json")
     root = tk.Tk()
-    GameApp(root, args.port, args.log_dir, args.tilt, args.axis, args.invert,
-            args.range_deg)
+    GameApp(root, ports, args.log_dir, tilt=args.tilt, axis=args.axis,
+            invert_roles=parse_roles(args.invert_roles), range_deg=args.range_deg,
+            driver=args.driver, stream=bool(ports),
+            invert_fwd_roles=parse_roles(args.invert_fwd_roles))
     root.mainloop()
 
 

@@ -61,6 +61,12 @@ SCREENS = (
 
 SCREENS_BY_KEY = {s.key: s for s in SCREENS}
 
+# The Colour Reflex game uses all five buttons as answers, so while it plays its
+# legend names the colours instead of Pain now / Left / Pause / Right / End.
+# Pausing and ending are done by the therapist with the p and e keys.
+REFLEX_PLAY = _screen("play", "Colour reflex", "Press the colour that lights",
+                      "Gray", "Yellow", "Green", "Blue", "Red")
+
 
 def problems() -> list:
     """Everything wrong with the table, as readable strings. Empty means fine."""

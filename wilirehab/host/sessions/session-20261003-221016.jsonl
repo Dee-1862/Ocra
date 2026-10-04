@@ -1,0 +1,9 @@
+{"t": 1791079819.319, "kind": "flick", "role": "left_hand", "dir": "down", "result": "none"}
+{"t": 1791079820.09, "kind": "miss", "role": null, "n": 1, "want": "up"}
+{"t": 1791079821.319, "kind": "miss", "role": null, "n": 2, "want": "right"}
+{"t": 1791079822.47, "kind": "miss", "role": null, "n": 3, "want": "left"}
+{"t": 1791079823.667, "kind": "miss", "role": null, "n": 4, "want": "left"}
+{"t": 1791079825.036, "kind": "miss", "role": null, "n": 5, "want": "up"}
+{"t": 1791079825.815, "kind": "hit", "role": "left_hand", "n": 1, "dir": "down", "err_ms": -156}
+{"t": 1791079827.667, "kind": "miss", "role": null, "n": 6, "want": "right"}
+{"t": 1791079829.035, "kind": "miss", "role": null, "n": 7, "want": "up"}
