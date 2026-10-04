@@ -18,6 +18,14 @@ import threading
 from .button_map import BUTTONS
 
 
+def battery_percent(mv: int) -> int:
+    """A rough charge percent from the cell voltage: 3.3 V empty, 4.2 V full, straight line.
+
+    A straight line is only an estimate (a Li-ion discharge curve is not straight), and while
+    USB is charging the cell the voltage reads higher than its true rest value."""
+    return max(0, min(100, round((mv - 3300) / 9.0)))
+
+
 def parse_line(line: str):
     """One OG line -> ("press", colour) | ("release", colour) |
     ("acc", (seq, t_ms, x, y, z)) | None.
@@ -31,6 +39,11 @@ def parse_line(line: str):
             return ("press", parts[1])
         if parts[2] == "up":
             return ("release", parts[1])
+    if len(parts) == 3 and parts[0] == "BAT":
+        try:
+            return ("battery", (int(parts[1]), parts[2] == "1"))
+        except ValueError:
+            return None
     if len(parts) == 6 and parts[0] == "ACC":
         try:
             return ("acc", tuple(int(p) for p in parts[1:]))

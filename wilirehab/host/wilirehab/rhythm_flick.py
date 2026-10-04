@@ -179,6 +179,10 @@ class RhythmApp(GameApp):
                 self._say("MISS", "#ef4444")
                 self.session.record("miss", role=b.get("hand"), n=self.misses, want=b["dir"])
 
+    def _points(self) -> list:
+        return [("Hits", str(self.hits), ""), ("Misses", str(self.misses), ""),
+                ("Tempo", str(self.bpm), "BPM")]
+
     def _og_lines(self) -> list:
         return [f"Hits {self.hits}", f"Misses {self.misses}", f"Tempo {self.bpm} BPM"]
 

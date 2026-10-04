@@ -19,6 +19,13 @@ def test_pain_buttons_run_from_minus_two_to_plus_two_with_green_confirming():
     assert [pain[b] for b in bm.BUTTONS] == ["-2", "-1", "OK", "+1", "+2"]
 
 
+def test_the_page_open_screen_keeps_go_and_stop_buttons():
+    page = bm.PAGE_OPEN
+    assert page.key == "paused"                       # the game treats it as paused
+    assert [page.actions[b] for b in bm.BUTTONS] == ["Next page", "Close", "Resume", "Re-zero", "End"]
+    assert page.actions["green"] == bm.SCREENS_BY_KEY["paused"].actions["green"]
+
+
 def test_problems_catches_a_long_label(monkeypatch):
     bad = bm._screen("x", "X", "x", None, None, "A label that is far too long", None, "Back")
     monkeypatch.setattr(bm, "SCREENS", bm.SCREENS + (bad,))

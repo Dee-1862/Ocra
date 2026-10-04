@@ -43,6 +43,11 @@ static int16_t s_beep[BEEP_MAX_N];
 static unsigned s_stream_hz;     /* 0 = accelerometer stream off */
 static uint32_t s_next_acc_ms;
 static uint32_t s_acc_seq;
+
+/* Battery: one `BAT <mV> <usb 0|1>` line every few seconds while a host is attached. */
+#define BAT_PERIOD_MS 5000u
+static bool     s_bat_ok;
+static uint32_t s_next_bat_ms;
 static uint16_t s_fg, s_bg, s_accent;
 
 /* IMG: one rectangle of raw RGB565 from the host. Static, not a stack local:
@@ -158,6 +163,10 @@ int main(void) {
     lis3dh_init();
     s_accel_ok = lis3dh_configure(LIS3DH_RANGE_2G);
 
+    /* Only turns the charger's ADC on so the battery voltage can be read; it changes no
+       charging settings (bq25896_start_charging() would, so it is not called here). */
+    s_bat_ok = bq25896_adc_continuous_enable();
+
     /* The speaker. Same state machine as apps/bench (pio0, sm 2; sm 0 is the LEDs). A
        failure only means no beeps: BEEP then answers ERR audio. */
     s_audio_ok = i2s_audio_init(pio0, 2u);
@@ -186,8 +195,9 @@ int main(void) {
         draw_row(0, "WiliRehab");
         draw_row(1, "waiting for host");
     }
-    DIAG("[wilirehab_display] alive lcd=%s accel=%s audio=%s\n", s_lcd_ready ? "ok" : "FAILED",
-         s_accel_ok ? "ok" : "FAILED", s_audio_ok ? "ok" : "FAILED");
+    DIAG("[wilirehab_display] alive lcd=%s accel=%s audio=%s battery=%s\n",
+         s_lcd_ready ? "ok" : "FAILED", s_accel_ok ? "ok" : "FAILED",
+         s_audio_ok ? "ok" : "FAILED", s_bat_ok ? "ok" : "FAILED");
 
     rehab_lines_t lines;
     rehab_lines_init(&lines);
@@ -202,6 +212,15 @@ int main(void) {
             if (pw.buttons.released & FWOG_BTN_BIT(id))
                 printf("BTN %s up\n", kBtnName[id]);
         }
+
+#if FWOG_DIAG == FWOG_DIAG_USB
+        if (s_bat_ok && (int32_t)(now - s_next_bat_ms) >= 0) {
+            s_next_bat_ms = now + BAT_PERIOD_MS;
+            bq25896_telemetry_t bat;
+            if (stdio_usb_connected() && bq25896_read_all(&bat))
+                printf("BAT %u %u\n", (unsigned)bat.vbat_mv, bat.vbus_attached ? 1u : 0u);
+        }
+#endif
 
         /* Raw accelerometer lines, only while the host asked for them. If the
            host goes away, stop: printf to a USB port nobody reads can block,

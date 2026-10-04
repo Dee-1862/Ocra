@@ -75,22 +75,27 @@ def face_line(row) -> str:
 
 
 def compose(*, name, screen_key, screen_title="", uses_buttons=False, game_lines=(),
-            hand="", face="", pain=0, summary_lines=()):
-    """-> (eight rows of text, bar percent or None)."""
+            hand="", face="", pain=0, summary_lines=(), elapsed_s=0.0, battery=None):
+    """-> (eight rows of text, bar percent or None).
+
+    While playing, the OG is a controller: only the game name, its points, the timer and the
+    battery. The hand and face readings live on the laptop screen (`hand` and `face` are
+    accepted for older callers and not shown). `battery` is a percent, or None until known."""
     rows = [""] * ROWS
     rows[0] = fit(name)
     rows[1] = fit(STATUS.get(screen_key, screen_title.upper()))
     bar = None
 
     if screen_key in PLAY_SCREENS:
-        for i, line in enumerate(list(game_lines)[:3]):
-            rows[2 + i] = fit(line)
-        rows[5] = fit(hand)
-        rows[6] = fit(face)
-        if screen_key == "play":
-            rows[7] = "Press the colour" if uses_buttons else "Green: pause"
-        else:
-            rows[7] = "Green: resume"
+        # Only the first game line (the main score); the rest are on the laptop screen.
+        lines = list(game_lines)
+        secs = int(elapsed_s)
+        rows[0] = "Playing..." if screen_key == "play" else "Paused..."
+        rows[1] = ""
+        rows[2] = fit(name)
+        rows[4] = fit(lines[0]) if lines else ""
+        rows[6] = f"Time {secs // 60}:{secs % 60:02d}"
+        rows[7] = "Battery: " if battery is None else f"Battery {int(battery)}%"
     elif screen_key == "end":
         rows[2], rows[3] = "Green: end now", "Red: keep going"
     elif screen_key == "pain":

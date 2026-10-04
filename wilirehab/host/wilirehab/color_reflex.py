@@ -153,6 +153,12 @@ class ReflexApp(GameApp):
             self.session.record("too_slow", color=self.target)
             self._next_prompt()
 
+    def _points(self) -> list:
+        s = self.rt.summary()
+        return [("Correct", str(self.correct), ""),
+                ("Wrong / slow", f"{self.wrong} / {self.slow_count}", ""),
+                ("Median", "--" if s is None else str(int(s["median"])), "ms")]
+
     def _og_lines(self) -> list:
         s = self.rt.summary()
         return [f"Correct {self.correct}", f"Wrong {self.wrong} Slow {self.slow_count}",

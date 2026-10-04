@@ -66,6 +66,13 @@ SCREENS = (
 
 SCREENS_BY_KEY = {s.key: s for s in SCREENS}
 
+# While a readings page is open, gray and yellow become page controls (Next page flips Hand
+# and Face, Close returns to the veiled game); green stays "go on" and red stops. Same key
+# as "paused" on purpose: the game treats it as the paused screen. It is not in SCREENS (the
+# demo's screen list); the game swaps it in only while a page is open.
+PAGE_OPEN = _screen("paused", "Gameplay", "Reading a page: green to resume",
+                    "Next page", "Close", "Resume", "Re-zero", "End")
+
 # The Colour Reflex game uses all five buttons as answers, so while it plays its
 # legend names the colours instead of Face / Hand / Pause / Pain now / End.
 # Pausing and ending are done by the therapist with the p and e keys.

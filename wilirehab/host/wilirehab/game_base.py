@@ -38,7 +38,7 @@ from PIL import ImageTk
 from . import cli, ui
 from .align import LagFusion
 from .bilateral import HandStats, format_row, symmetry_report
-from .button_map import SCREENS, SCREENS_BY_KEY
+from .button_map import PAGE_OPEN, SCREENS, SCREENS_BY_KEY
 from .cli import add_common_args, parse_roles, resolve_ports
 from .data_panel import DataPanel
 from .datatable import DataTable
@@ -48,7 +48,7 @@ from .face_view import FacePreview
 from .og_screen import OgScreenWriter, buttons_live, compose, face_line, hand_line
 from .mapping_demo import App, BG, DIM, FG, PAIN_STEPS, PANEL, W, blend
 from .measures import describe_trend, tremor_band, trend_per_minute
-from .og_link import OgLink
+from .og_link import OgLink, battery_percent
 from .session import SessionLog
 from .tilt import TiltTracker, raw_to_mg, to_position
 
@@ -134,6 +134,7 @@ class GameApp(App):
         self._last_hand: dict = {}
         self._last_face = None
         self._og_writers: dict = {}
+        self._battery: dict = {}                   # role -> percent; empty until the OG reports it
         self._og_error_shown = False
         self.fusion = LagFusion()
         self._face_q: queue.Queue = queue.Queue()
@@ -223,6 +224,19 @@ class GameApp(App):
     def _go(self, key: str) -> None:
         self._select(SCREENS.index(SCREENS_BY_KEY[key]))
 
+    def _select(self, index: int) -> None:
+        super()._select(index)
+        self._sync_legend()
+
+    def _sync_legend(self) -> None:
+        """While a readings page is open, the paused screen shows the page buttons."""
+        if self.screen.key != "paused":
+            return
+        want = PAGE_OPEN if getattr(self, "page", None) else SCREENS_BY_KEY["paused"]
+        if self.screen is not want:
+            self.screen = want
+            self._render()
+
     # ---- the webcam --------------------------------------------------
 
     def _start_face(self, camera: int, rest_s: float) -> None:
@@ -282,6 +296,7 @@ class GameApp(App):
                     screen_title=self.screen.title, uses_buttons=self.USES_BUTTONS,
                     game_lines=self._og_lines(), hand=hand_line(self._last_hand.get(role)),
                     face=face_line(self._last_face), pain=self.pain,
+                    elapsed_s=self.play_seconds, battery=self._battery.get(role),
                     summary_lines=summary)
                 writer.show(rows, bar)
         except Exception as exc:        # shown in the window, once, not swallowed
@@ -347,6 +362,10 @@ class GameApp(App):
                     self.press(value, f"OG:{role}")
                 elif kind == "release":
                     self._on_release(value, role)
+                elif kind == "battery":
+                    mv, usb = value
+                    self._battery[role] = battery_percent(mv)
+                    self.data.add("og", "battery", role=role, mv=mv, usb=usb)
                 elif kind == "acc":
                     seq, t_ms, x, y, z = value
                     self.data.add("og", "acc", device_ms=t_ms, role=role, seq=seq,
@@ -478,6 +497,17 @@ class GameApp(App):
                     self._go("paused")                    # redraws, page included
                 else:
                     self._draw_body()
+                return
+            if label == "Next page" and key == "paused":
+                self._set_panel("face" if self.page == "hand" else "hand")
+                return
+            if label == "Close" and key == "paused":
+                self._set_panel(None)
+                return
+            if label == "End" and key == "paused":
+                self._set_panel(None, redraw=False)
+                self.session.record("end", at_s=round(self.play_seconds, 1))
+                self._go("end")
                 return
             if label == "Re-zero":
                 self._rezero()
@@ -639,6 +669,7 @@ class GameApp(App):
             self._preview = FacePreview(cli.FACE.get("preview", 0))
             self._preview.start()
         self.page = mode
+        self._sync_legend()
         if redraw:
             self._draw_body()
 
@@ -686,7 +717,36 @@ class GameApp(App):
             c.create_text(tx + w - 60, mid + 3, text=unit, anchor="w", fill=ui.FAINT,
                           font=ui.font(11), tags="body")
 
+    def _points(self) -> list:
+        """Up to three (label, value, unit) game results for the Hand page. Games override."""
+        return []
+
+    def _cards(self, items, cols: int, top: int, bottom: int, big: int = 22) -> None:
+        """Small cards in a grid: the label on top, the number under it, then its unit.
+
+        Same surfaces and type as the rest of the window (raised card, dim label, bright
+        number), but stacked, so three fit across where the row table fits two."""
+        c, (x0, _y0, x1, _y1) = self.canvas, PANEL_BOX
+        gap, pad = 10, 18
+        rows = -(-len(items) // cols)
+        w = (x1 - x0 - 2 * pad - gap * (cols - 1)) / cols
+        h = (bottom - top - gap * (rows - 1)) / rows
+        for i, (label, value, unit) in enumerate(items):
+            tx = x0 + pad + (i % cols) * (w + gap)
+            ty = top + (i // cols) * (h + gap)
+            ui.rrect(c, tx, ty, tx + w, ty + h, r=12, top=ui.RAISED, bottom=ui.RAISED,
+                     border=ui.LINE, tags="body")
+            c.create_text(tx + 14, ty + 14, text=label, anchor="w", fill=DIM,
+                          font=ui.font(11, True), tags="body")
+            c.create_text(tx + 14, ty + h - 17, text=value, anchor="w", fill=FG,
+                          font=ui.font(big, True), tags="body")
+            if unit:
+                c.create_text(tx + 22 + ui.text_width(value, big, True), ty + h - 14,
+                              text=unit, anchor="w", fill=ui.FAINT, font=ui.font(10),
+                              tags="body")
+
     def _draw_hand_page(self) -> None:
+        c, (x0, y0, x1, y1) = self.canvas, PANEL_BOX
         role = self.driver
         roll, pitch = self.angles.get(role), self.pitch_angles.get(role)
         s = self.stats.get(role)
@@ -696,16 +756,31 @@ class GameApp(App):
         def num(v, spec):
             return "--" if v is None else format(v, spec)
 
-        self._tiles([
+        # Who and how long: the game's name, and the time played so far.
+        secs = int(self.play_seconds)
+        c.create_text(x0 + 22, y0 + 62, text=self.OG_NAME.title(), anchor="w", fill=FG,
+                      font=ui.font(20, True), tags="body")
+        c.create_text(x1 - 22, y0 + 62, text=f"{secs // 60}:{secs % 60:02d}", anchor="e",
+                      fill=FG, font=ui.font(26, True), tags="body")
+        c.create_text(x1 - 22 - ui.text_width(f"{secs // 60}:{secs % 60:02d}", 26, True) - 8,
+                      y0 + 66, text="played", anchor="e", fill=ui.FAINT, font=ui.font(10),
+                      tags="body")
+        # How it is going: the game's own points.
+        points = self._points()
+        if points:
+            self._cards(points, len(points), y0 + 86, y0 + 150, big=24)
+        # The hand: where it is and how it moves.
+        self._cards([
             ("Roll now", num(roll, "+.1f"), "deg"),
             ("Pitch now", num(pitch, "+.1f"), "deg"),
+            ("Pain presses", str(self.pain_events), ""),
             ("Roll range", num(s and s.range_deg, ".0f"), "deg"),
             ("Pitch range", num(s and s.pitch_range_deg, ".0f"), "deg"),
+            ("Range of motion", num(hand.get("rom"), ".0f"), "deg"),
             ("Peak speed", num(s and s.peak_dps, ".0f"), "deg/s"),
             ("Tremor", num(tremor[-1] if tremor else None, ".1f"), "mg"),
             ("Jerk", num(hand.get("jerk_peak"), ".0f"), ""),
-            ("Range of motion", num(hand.get("rom"), ".0f"), "deg"),
-        ], cols=2, top=PANEL_BOX[1] + 46, bottom=PANEL_BOX[3] - 16)
+        ], cols=3, top=y0 + (162 if points else 86), bottom=y1 - 14)
 
     def _draw_face_page(self) -> None:
         c, (x0, y0, x1, y1) = self.canvas, PANEL_BOX

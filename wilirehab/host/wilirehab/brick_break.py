@@ -70,6 +70,11 @@ class BrickApp(GameApp):
         return [f"Bricks {g.score}", f"Drops {g.drops} Lv {g.levels + 1}",
                 "Tilt --" if angle is None else f"Tilt {angle:+.0f} deg"]
 
+    def _points(self) -> list:
+        g = self.game
+        return [("Bricks", str(g.score), ""), ("Drops", str(g.drops), ""),
+                ("Level", str(g.levels + 1), "")]
+
     def _end_fields(self) -> dict:
         return {"bricks": self.game.score, "drops": self.game.drops,
                 "levels": self.game.levels, "range_deg": round(self.autorange.span, 1)}

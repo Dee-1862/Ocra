@@ -91,6 +91,11 @@ class DialApp(GameApp):
                                 tolerance=self.dial.tolerance)
             self._since_target = 0.0
 
+    def _points(self) -> list:
+        d = self.dial
+        return [("Reached", str(d.completed), ""), ("Timed out", str(d.timeouts), ""),
+                ("Target", f"{d.target:+.0f}", "deg")]
+
     def _og_lines(self) -> list:
         d = self.dial
         return [f"Done {d.completed}", f"Timed out {d.timeouts}",

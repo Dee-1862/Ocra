@@ -108,6 +108,12 @@ class SteadyApp(GameApp):
         if event:
             self._target_sum, self._target_n = 0.0, 0
 
+    def _points(self) -> list:
+        done, missed = self.hold.completed, self.hold.timeouts
+        rate = "--" if done + missed == 0 else f"{100 * done / (done + missed):.0f}"
+        return [("Rings held", str(done), ""), ("Missed", str(missed), ""),
+                ("Success", rate, "%")]
+
     def _og_lines(self) -> list:
         roll, pitch = self._cursor()
         return [f"Held {self.hold.completed}", f"Missed {self.hold.timeouts}",
