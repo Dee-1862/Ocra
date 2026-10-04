@@ -18,6 +18,8 @@ __pycache__/
 past_projects/
 .gyst/
 
+wilirehab/host/tests/
+
 # Maintainer-only orientation doc. AGENTS.md is the published one.
 AGENTS.local.md
 

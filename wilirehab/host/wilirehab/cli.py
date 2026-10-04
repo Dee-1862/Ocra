@@ -9,14 +9,38 @@ The games use ONE OG. If several are found only one is used.
 """
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
 from .devices import (DEFAULT_CONFIG, ROLES, assign_roles, find_og_displays,
                       load_config)
 
+# Set while arguments are parsed, read by GameApp. A module-level setting
+# because every game builds its own GameApp from its own parsed arguments, and
+# the webcam is the one option all of them share.
+FACE = {"camera": None, "rest_s": 10.0}
+
+
+class _FaceAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        FACE["camera"] = 0 if values is None else values
+        setattr(namespace, self.dest, FACE["camera"])
+
+
+class _FaceRestAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        FACE["rest_s"] = values
+        setattr(namespace, self.dest, values)
+
 
 def add_common_args(ap) -> None:
+    ap.add_argument("--face", nargs="?", type=int, metavar="CAMERA", action=_FaceAction,
+                    help="turn the webcam on for the face table (optional camera number, "
+                         "default 0). Off unless asked: it uses the camera. Numbers only "
+                         "are kept; no video is stored")
+    ap.add_argument("--face-rest-s", type=float, default=10.0, action=_FaceRestAction,
+                    help="seconds of neutral face used as the face baseline (default 10)")
     ap.add_argument("--port", help="serial port of one OG display CPU, e.g. COM5")
     ap.add_argument("--no-og", action="store_true",
                     help="run without an OG: keyboard and clicks only")

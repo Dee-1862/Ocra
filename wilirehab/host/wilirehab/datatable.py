@@ -62,6 +62,7 @@ class DataTable:
         self._last_shown: dict = {}
         self._ui: list = []
         self.latest: dict = {}
+        self._listeners: list = []
         self._file = None
         self._csv = None
         self._last_flush = 0.0
@@ -76,11 +77,25 @@ class DataTable:
         """Seconds since this table was created (the 'time' column)."""
         return self._clock() - self._t0
 
-    def add(self, source: str, channel: str, device_ms=None, role=None, **fields) -> dict:
+    def from_clock(self, clock_value: float) -> float:
+        """A reading of this table's clock (time.monotonic by default) as a 'time' value.
+
+        A background thread, such as the face camera, stamps its rows with
+        the clock when it captures them; the window thread adds them later.
+        This puts the capture time, not the arrival time, in the table."""
+        return clock_value - self._t0
+
+    def subscribe(self, callback) -> None:
+        """Call `callback(row)` for every row added from now on, on the adding thread."""
+        self._listeners.append(callback)
+
+    def add(self, source: str, channel: str, device_ms=None, role=None, at=None,
+            **fields) -> dict:
         """Record one row. `device_ms` is the sensor's own clock, if it has one.
-        `role` says which device it came from (left_hand, right_hand, ...)."""
+        `role` says which device it came from (left_hand, right_hand, ...).
+        `at` is the capture time in table seconds (see from_clock); omitted, it is now."""
         check_fields(fields)
-        t = self.now()
+        t = self.now() if at is None else at
         row = {"t": t, "role": role, "source": source, "channel": channel,
                "device_ms": device_ms, "fields": fields,
                "text": format_fields(fields)}
@@ -98,6 +113,8 @@ class DataTable:
         if t - self._last_shown.get(shown_key, -1e9) >= gap:
             self._last_shown[shown_key] = t
             self._ui.append(row)
+        for callback in self._listeners:
+            callback(row)
         return row
 
     def drain_ui(self) -> list:

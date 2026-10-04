@@ -126,6 +126,41 @@ def estimate_aus(rest: FaceMeasures, now: FaceMeasures) -> ActionUnits:
     )
 
 
+BLINK_WINDOW = 21     # frames, about 0.7 s at 30 fps. A placeholder, not a fitted value.
+
+
+class SmoothedAUs:
+    """Per-unit median over the last `window` frames.
+
+    A blink is an eye closure, which PSPI scores, so without this every blink
+    would read as a pain expression. A median over about 0.7 s drops closures
+    of up to roughly 10 frames (a third of a second) and keeps a squint or a
+    held closure. The window is a guess at a blink's length, not a measured
+    one, and it delays a real change by about half the window.
+    """
+
+    def __init__(self, window: int = BLINK_WINDOW):
+        from collections import deque
+        self._frames = deque(maxlen=max(1, window))
+
+    def add(self, aus: ActionUnits) -> ActionUnits:
+        self._frames.append(aus)
+        n = len(self._frames)
+
+        def med(values):
+            ordered = sorted(values)
+            return ordered[n // 2] if n % 2 else 0.5 * (ordered[n // 2 - 1] + ordered[n // 2])
+
+        return ActionUnits(
+            au4=med([a.au4 for a in self._frames]), au6=0.0,
+            au7=med([a.au7 for a in self._frames]), au9=0.0,
+            au10=med([a.au10 for a in self._frames]),
+            au43=1 if med([a.au43 for a in self._frames]) >= 0.5 else 0)
+
+    def reset(self) -> None:
+        self._frames.clear()
+
+
 def mean_rgb(frame, landmarks, indices=SKIN, radius: int = 0):
     """Mean R,G,B around the landmark pixels that fall inside `frame`.
 

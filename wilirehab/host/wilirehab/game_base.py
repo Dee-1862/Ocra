@@ -20,17 +20,22 @@ from __future__ import annotations
 
 import argparse
 import queue
+import threading
 import time
 import tkinter as tk
 from collections import deque
 from pathlib import Path
 from statistics import median
 
+from . import cli
+from .align import LagFusion
 from .bilateral import HandStats, format_row, symmetry_report
 from .button_map import SCREENS, SCREENS_BY_KEY
 from .cli import add_common_args, parse_roles, resolve_ports
 from .data_panel import DataPanel
 from .datatable import DataTable
+from .discomfort_panel import DiscomfortPanel
+from .motion_discomfort import HandMonitor
 from .mapping_demo import App, BG, DIM, FG, PANEL, W, blend
 from .measures import describe_trend, tremor_band, trend_per_minute
 from .og_link import OgLink
@@ -108,6 +113,11 @@ class GameApp(App):
                            for r in self.roles}
         self.pitch_angles: dict = {}
         self._null_tracker = TiltTracker(axis=axis)
+        self.hand_monitors = {r: HandMonitor() for r in self.roles}
+        self.fusion = LagFusion()
+        self._face_q: queue.Queue = queue.Queue()
+        self._face_stop = threading.Event()
+        self._face_thread = None
         self._acc_mg = {r: deque(maxlen=256) for r in self.roles}    # for tremor
         self._acc_ms = {r: deque(maxlen=256) for r in self.roles}
         self._tremor_next = {r: 0.0 for r in self.roles}
@@ -136,6 +146,12 @@ class GameApp(App):
         root.title(self.TITLE)
         self.panel = DataPanel(root, self.data)
         self.panel.grid(row=0, column=2, sticky="ns", padx=(0, 12), pady=12)
+        face_on = cli.FACE["camera"] is not None
+        self.discomfort = DiscomfortPanel(root, self.data, face_on)
+        self.discomfort.grid(row=1, column=0, columnspan=3, sticky="ew", padx=12, pady=(0, 12))
+        if face_on:
+            self._start_face(cli.FACE["camera"], cli.FACE["rest_s"])
+        root.after(100, self._poll_face)
         for role, port in ports.items():
             link = OgLink(port, self.events, role=role,
                           on_connect=("STREAM 50",) if self._stream else ())
@@ -172,7 +188,43 @@ class GameApp(App):
     def _go(self, key: str) -> None:
         self._select(SCREENS.index(SCREENS_BY_KEY[key]))
 
+    # ---- the webcam --------------------------------------------------
+
+    def _start_face(self, camera: int, rest_s: float) -> None:
+        """Run the face camera on its own thread; rows come back through a queue."""
+        def work() -> None:
+            try:
+                from .face_monitor import FaceMonitor
+                monitor = FaceMonitor(camera, rest_s=rest_s)
+                monitor.run(self._face_stop, lambda row: self._face_q.put(("row", row)))
+                if monitor.error:
+                    self._face_q.put(("error", monitor.error))
+            except Exception as exc:        # shown in the window, not swallowed
+                self._face_q.put(("error", f"{type(exc).__name__}: {exc}"))
+
+        self._face_thread = threading.Thread(target=work, daemon=True)
+        self._face_thread.start()
+
+    def _poll_face(self) -> None:
+        try:
+            while True:
+                kind, value = self._face_q.get_nowait()
+                if kind == "error":
+                    self.status.configure(text=f"Face camera stopped: {value}")
+                    continue
+                at = self.data.from_clock(value.pop("mono"))
+                self.data.add("face", "reading", at=at, **value)
+                self.fusion.add_face(at, value)
+        except queue.Empty:
+            pass
+        for event in self.fusion.poll(self.data.now()):
+            self.data.add("fusion", "event", **event)
+        self.root.after(100, self._poll_face)
+
     def _close(self) -> None:
+        self._face_stop.set()
+        if self._face_thread is not None:
+            self._face_thread.join(timeout=2.0)
         for link in self.links.values():
             link.close()
         self.session.close()
@@ -250,6 +302,11 @@ class GameApp(App):
         if self.screen.key == "play":
             self.stats[role].update(t_ms / 1000.0, slow, fast_tracker.absolute,
                                     pitch, self.pitch_fast[role].absolute)
+            hand_row = self.hand_monitors[role].add(
+                t_ms / 1000.0, raw_to_mg(x), raw_to_mg(y), raw_to_mg(z), slow, pitch)
+            if hand_row is not None:
+                row = self.data.add("hand", "motion", role=role, **hand_row)
+                self.fusion.add_hand(row["t"], hand_row)
         self._check_tremor(role, t_ms)
         self.data.add("og", "tilt", role=role, roll_deg=round(slow, 1),
                       pitch_deg=round(pitch, 1), steady=slow_tracker.steady)
