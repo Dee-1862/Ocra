@@ -1,8 +1,0 @@
-{"t": 1791089167.273, "kind": "dial_complete", "target": -30.0, "took_s": 6.4, "tolerance": 9.0}
-{"t": 1791089169.848, "kind": "dial_complete", "target": -5.0, "took_s": 2.6, "tolerance": 8.0}
-{"t": 1791089172.294, "kind": "dial_complete", "target": -30.0, "took_s": 2.5, "tolerance": 7.0}
-{"t": 1791089174.98, "kind": "dial_complete", "target": -5.0, "took_s": 2.7, "tolerance": 6.0}
-{"t": 1791089177.528, "kind": "dial_complete", "target": 30.0, "took_s": 2.5, "tolerance": 5.0}
-{"t": 1791089180.338, "kind": "dial_complete", "target": 20.0, "took_s": 2.8, "tolerance": 4.0}
-{"t": 1791089182.656, "kind": "dial_complete", "target": 10.0, "took_s": 2.3, "tolerance": 4.0}
-{"t": 1791089184.955, "kind": "dial_complete", "target": -10.0, "took_s": 2.3, "tolerance": 4.0}
