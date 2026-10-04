@@ -47,22 +47,27 @@ SCREENS = (
             None, "Left hand", "Confirm", "Right hand", "Back"),
     _screen("calibration", "Calibration", "Move through your comfortable range",
             "Restart", "Prev step", "Capture", "Skip", "Cancel"),
+    # Pausing turns Pause into Resume and End into Restart, so the same two buttons stay the
+    # "go on" and "start over" buttons. Face and Hand open a readings page, which pauses the
+    # game; Resume closes it. Re-zero needs a still hand, so it lives on the paused screen.
     _screen("play", "Gameplay", "Follow the target",
-            "Pain now", "Left", "Pause", "Right", "End"),
-    _screen("paused", "Paused", "Take your time",
-            None, None, "Resume", None, "End"),
+            "Face", "Hand", "Pause", "Pain now", "End"),
+    # Same title as Gameplay: pausing stays on the game screen (the game is veiled and says
+    # "Paused"), instead of looking like a different page.
+    _screen("paused", "Gameplay", "Paused: green to resume",
+            "Face", "Hand", "Resume", "Re-zero", "Restart"),
     _screen("end", "End session?", "This stops the current session",
             None, None, "End now", None, "Keep going"),
     _screen("pain", "Pain check-in", "How much does it hurt? 0 to 10",
-            "+1", "-1", "Confirm", "+1", "-1"),
+            "-2", "-1", "OK", "+1", "+2"),       # less pain on the left, more on the right
     _screen("summary", "Session summary", "Well done",
-            "Next", "Prev", "Done", "Next", "Back"),
+            None, None, "Restart", None, "Menu"),
 )
 
 SCREENS_BY_KEY = {s.key: s for s in SCREENS}
 
 # The Colour Reflex game uses all five buttons as answers, so while it plays its
-# legend names the colours instead of Pain now / Left / Pause / Right / End.
+# legend names the colours instead of Face / Hand / Pause / Pain now / End.
 # Pausing and ending are done by the therapist with the p and e keys.
 REFLEX_PLAY = _screen("play", "Colour reflex", "Press the colour that lights",
                       "Gray", "Yellow", "Green", "Blue", "Red")

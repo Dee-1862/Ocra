@@ -28,12 +28,13 @@ from .button_map import BUTTONS, COLORS, SCREENS, Screen
 from .ui import BG, DIM, FG, FONT, PANEL
 
 W, H = 640, 480            # the OG panel is 320x240; drawn at 2x
-LEGEND_Y = 384             # circle centres
-RADIUS = 24
+LEGEND_Y = 418             # circle centres
+RADIUS = 16                # small, so the play area and readings above get the room
 RING_SECONDS = 0.6
 BANNER_SECONDS = 1.4
 
 blend = ui.mix             # colour a at t=0 fading to colour b at t=1
+PAIN_STEPS = ("-2", "-1", "+1", "+2")      # the pain screen's labels that change the score
 
 
 @dataclass
@@ -120,19 +121,19 @@ class App:
         c.create_text(31, 72, text=self.screen.hint, anchor="w", fill=DIM,
                       font=ui.font(12), tags="static")
         self._draw_body()
-        ui.rrect(c, 16, 332, W - 16, H - 14, r=20, top=ui.SURFACE_TOP, bottom=ui.SURFACE,
+        ui.rrect(c, 16, 388, W - 16, H - 12, r=18, top=ui.SURFACE_TOP, bottom=ui.SURFACE,
                  border=ui.LINE, shadow=10, tags="static")
         for i, b in enumerate(BUTTONS):
             label = self.screen.label(b)
             x = self.circle_x[i]
             if label:
                 ui.orb(c, x, LEGEND_Y, RADIUS, COLORS[b], tags=("static", "btn_" + b))
-                c.create_text(x, LEGEND_Y + RADIUS + 22, text=label, fill=FG,
-                              font=ui.font(11, True), tags="static")
+                c.create_text(x, LEGEND_Y + RADIUS + 20, text=label, fill=FG,
+                              font=ui.font(12, True), tags="static")
             else:
                 ui.ring(c, x, LEGEND_Y, RADIUS - 1, blend(COLORS[b], ui.SURFACE, 0.72), thick=2,
                         tags=("static", "btn_" + b))
-                c.create_text(x, LEGEND_Y + RADIUS + 22, text="not used", fill=ui.FAINT,
+                c.create_text(x, LEGEND_Y + RADIUS + 20, text="not used", fill=ui.FAINT,
                               font=ui.font(10), tags="static")
 
     def _draw_body(self) -> None:
@@ -162,7 +163,7 @@ class App:
     def _on_click(self, event) -> None:
         for i, b in enumerate(BUTTONS):
             dx, dy = event.x - self.circle_x[i], event.y - LEGEND_Y
-            if dx * dx + dy * dy <= (RADIUS + 8) ** 2:
+            if dx * dx + dy * dy <= (RADIUS + 16) ** 2:      # a generous target for a small circle
                 self.press(b, "click")
                 return
 
@@ -185,10 +186,8 @@ class App:
         """The only state the demo changes: the pain number."""
         if self.screen.key != "pain" or not label:
             return
-        if label == "+1":
-            self.pain = min(10, self.pain + 1)
-        elif label == "-1":
-            self.pain = max(0, self.pain - 1)
+        if label in PAIN_STEPS:
+            self.pain = max(0, min(10, self.pain + int(label)))
         self._draw_body()
 
     # ---- animation ---------------------------------------------------
@@ -203,15 +202,15 @@ class App:
         self.canvas.delete("banner")
         self.anims = [a for a in self.anims if a.kind != "banner"]
         if label:
-            text = f"âœ“ {button.upper()}  {label}  recorded"
+            text = f"{button.upper()}  {label}  recorded"
         else:
             text = f"{button.upper()}  not used on this screen"
         self.anims.append(Anim("banner", now, BANNER_SECONDS, color, W / 2, 316, 0.0, text))
         # A short flash on the circle itself.
         self.canvas.delete("flash")
-        self.canvas.create_oval(x - RADIUS - 3, LEGEND_Y - RADIUS - 3, x + RADIUS + 3,
-                                LEGEND_Y + RADIUS + 3, outline="#ffffff" if label else DIM,
-                                width=3, tags="flash")
+        self.canvas.create_oval(x - RADIUS - 2, LEGEND_Y - RADIUS - 2, x + RADIUS + 2,
+                                LEGEND_Y + RADIUS + 2, outline="#ffffff" if label else DIM,
+                                width=2, tags="flash")
         self.root.after(140, lambda: self.canvas.delete("flash"))
         if not self.ticking:
             self.ticking = True
@@ -231,8 +230,8 @@ class App:
                 continue
             ease = 1 - (1 - p) ** 3
             if a.kind == "ring":
-                r = RADIUS + 4 + 46 * ease
-                width = max(1.0, 7 * (1 - p))
+                r = RADIUS + 3 + 16 * ease
+                width = max(1.0, 3 * (1 - p))
                 color = blend(a.color, PANEL, p)
                 box = (a.cx - r, a.cy - r, a.cx + r, a.cy + r)
                 if not a.item:

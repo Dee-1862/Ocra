@@ -19,7 +19,7 @@ The buttons are unlabeled, so **every screen shows a legend row** (text row 7) n
 | Gameplay | Pain now | Left | **Pause** | Right | End |
 | Paused | - | - | **Resume** | - | End |
 | End session? | - | - | **End now** | - | Keep going |
-| Pain 0 to 10 | +1 | -1 | **Confirm** | +1 | -1 |
+| Pain 0 to 10 | -2 | -1 | **OK** (keep the score) | +1 | +2 |
 | Summary | Next | Prev | **Done** | Next | Back |
 
 The same table is in code (`host/wilirehab/button_map.py`) and drives the on-screen legend in the mapping demo, so this table and the demo cannot disagree without a test failing.

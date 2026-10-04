@@ -19,7 +19,7 @@ from .devices import (DEFAULT_CONFIG, ROLES, assign_roles, find_og_displays,
 # Set while arguments are parsed, read by GameApp. A module-level setting
 # because every game builds its own GameApp from its own parsed arguments, and
 # the webcam is the one option all of them share.
-FACE = {"camera": None, "rest_s": 10.0}
+FACE = {"camera": None, "rest_s": 10.0, "preview": 0}   # "preview": camera for the Face page's video
 
 # Set by og_shell while it runs a game inside its own process: the shell owns the OG's
 # serial port, so the game borrows the shell's OgLink instead of opening the port again,

@@ -9,12 +9,18 @@ A game subclasses GameApp and overrides what it needs: _new_round, _advance, _dr
 _summary_lines, _end_fields, and optionally _apply, _on_key and _on_acc (call super()).
 
 Controls (see button_map.py, Gameplay screen):
-    yellow = Left   blue = Right   green = Pause   gray = Pain now   red = End
+    gray = Face   yellow = Hand   green = Pause   blue = Pain now   red = End
+    Paused: green = Resume   blue = Re-zero   red = Restart   (gray, yellow as above)
+    Summary: green = Restart   red = Menu (under og_shell; the game window closes)
 Press flow: play -> (pause) -> end? -> pain check-in -> summary -> new round.
+Face and Hand open a full-size readings page over the play area and pause the game; press
+the same button again to close the page, or Resume. Pain now logs "this hurts" (see
+_apply). Re-zero makes the current pose neutral.
 
 Only numbers are logged: sessions/session-<time>.jsonl (events) and
 sessions/data-<time>.csv (every reading).
-Keys while testing without the OG: 1 gray, 2 yellow, 3 green, 4 blue, 5 red; z sets neutral.
+Keys while testing without the OG: 1 gray, 2 yellow, 3 green, 4 blue, 5 red; z sets neutral;
+a / s stand in for tilting left / right (the old Left and Right buttons).
 """
 from __future__ import annotations
 
@@ -27,6 +33,8 @@ from collections import deque
 from pathlib import Path
 from statistics import median
 
+from PIL import ImageTk
+
 from . import cli, ui
 from .align import LagFusion
 from .bilateral import HandStats, format_row, symmetry_report
@@ -36,14 +44,16 @@ from .data_panel import DataPanel
 from .datatable import DataTable
 from .discomfort_panel import DiscomfortPanel
 from .motion_discomfort import HandMonitor
+from .face_view import FacePreview
 from .og_screen import OgScreenWriter, buttons_live, compose, face_line, hand_line
-from .mapping_demo import App, BG, DIM, FG, PANEL, W, blend
+from .mapping_demo import App, BG, DIM, FG, PAIN_STEPS, PANEL, W, blend
 from .measures import describe_trend, tremor_band, trend_per_minute
 from .og_link import OgLink
 from .session import SessionLog
 from .tilt import TiltTracker, raw_to_mg, to_position
 
 FIELD = (24, 104, W - 24, 282)    # x0, y0, x1, y1 on the canvas
+PANEL_BOX = (24, 96, W - 24, 380)  # a readings page: covers the field and the gap under it
 STEP = 0.10                       # paddle move per press without an OG, a fraction of the field
 TICK_MS = 33
 TILT_SLEW = 2.5                   # fastest the basket may move when tilt-steered, field widths/s
@@ -142,6 +152,11 @@ class GameApp(App):
         self._shared_link = cli.SHELL["link"]      # the OG shell's link, or None
         self._on_exit = cli.SHELL["on_exit"]
         self._dead = False                         # set by _close; stops every timer
+        self.page = None                           # None, "hand" or "face": a readings page
+        # (not `panel`: that is the live-data table widget, set further down)
+        self._preview = None                       # FacePreview, only while the face page shows
+        self._panel_next = 0.0
+        self._face_photo = None
         self._new_round()
         self.last_pain = None
         self.left_deg = range_deg       # full-left and full-right tilt; press l / r to set
@@ -280,6 +295,8 @@ class GameApp(App):
             return
         self._dead = True
         self.anims.clear()
+        if self._preview is not None:
+            self._preview.stop()
         for writer in self._og_writers.values():
             writer.idle()
         self._face_stop.set()
@@ -400,12 +417,21 @@ class GameApp(App):
                 self.session.record("tilt", deg=round(slow, 1),
                                     steady=slow_tracker.steady)
 
+    def _rezero(self) -> None:
+        """Make the current pose neutral (key z, and the Re-zero button)."""
+        for tracker in (*self.slow.values(), *self.fast.values(),
+                        *self.pitch.values(), *self.pitch_fast.values()):
+            tracker.zero()                  # next sample becomes neutral
+        self.status.configure(text="Neutral set to the current pose")
+
     def _on_key(self, event) -> None:
         if event.char == "z":
-            for tracker in (*self.slow.values(), *self.fast.values(),
-                            *self.pitch.values(), *self.pitch_fast.values()):
-                tracker.zero()              # next sample becomes neutral
-            self.status.configure(text="Neutral set to the current pose")
+            self._rezero()
+            return
+        if event.char in ("a", "s") and self.screen.key == "play":
+            # Stand-ins for the old Left / Right buttons, for trying a game with no OG.
+            # (Not "d": Steady Hand and Rhythm Flick already use u / d for up / down.)
+            self._apply("Left" if event.char == "a" else "Right")
             return
         if event.char in ("l", "r") and self.tilt_mode:
             self._set_extreme(event.char)
@@ -435,13 +461,37 @@ class GameApp(App):
         key = self.screen.key
 
         if key == "pain":
-            if label in ("+1", "-1"):
+            if label in PAIN_STEPS:
                 super()._apply(label)
-            elif label == "Confirm":
+            elif label == "OK":                         # no more change: keep this score
                 self.last_pain = self.pain          # _go() resets self.pain
                 self.session.record("pain_score", value=self.pain)
                 self._go("summary")
             return
+
+        if key in ("play", "paused"):
+            if label in ("Hand", "Face"):
+                mode = label.lower()
+                self._set_panel(None if self.page == mode else mode, redraw=False)
+                if key == "play" and self.page:           # a page to read means a game on hold
+                    self.session.record("pause", at_s=round(self.play_seconds, 1))
+                    self._go("paused")                    # redraws, page included
+                else:
+                    self._draw_body()
+                return
+            if label == "Re-zero":
+                self._rezero()
+                return
+            if label == "Restart" and key == "paused":
+                # Close this round's numbers properly, then start a fresh one.
+                self.session.record("restart", at_s=round(self.play_seconds, 1))
+                self._end_session()
+                self._new_round()
+                self._set_panel(None, redraw=False)
+                self._go("play")
+                return
+            if label == "Resume":
+                self._set_panel(None, redraw=False)       # then NEXT below goes back to play
 
         if key == "play":
             if label == "Left":
@@ -461,14 +511,18 @@ class GameApp(App):
             self._end_session()
             self._go("pain")
             return
-        if key == "summary" and label == "Done":
+        if key == "summary" and label == "Restart":
             self._new_round()
             self._go("play")
             return
-        if key == "summary" and label == "Back" and self._on_exit is not None:
-            # Under the OG shell, red goes back to its menu. A moment later, so the
-            # press ring finishes drawing on a window that still exists.
-            self.root.after(200, self._close)
+        if key == "summary" and label == "Menu":
+            if self._on_exit is not None:
+                # Under the OG shell, red goes back to its menu. A moment later, so the
+                # press animation finishes drawing on a window that still exists.
+                self.root.after(200, self._close)
+            else:
+                self.status.configure(text="Close this window to leave, or start "
+                                           "python -m wilirehab.og_shell for the menu")
             return
 
         target = NEXT.get((key, label))
@@ -524,13 +578,19 @@ class GameApp(App):
         now = time.monotonic()
         dt = min(0.1, now - self._last)
         self._last = now
-        if self.screen.key == "play":
-            if self.tilt_mode:
-                step = TILT_SLEW * dt
-                self.bx += max(-step, min(step, self.target_x - self.bx))
-            self._advance(dt)
-            self._draw_body()
-        self.root.after(TICK_MS, self._game_tick)
+        try:
+            if self.screen.key == "play":
+                if self.tilt_mode:
+                    step = TILT_SLEW * dt
+                    self.bx += max(-step, min(step, self.target_x - self.bx))
+                self._advance(dt)
+                self._draw_body()
+            elif self.screen.key == "paused" and self.page and now >= self._panel_next:
+                self._panel_next = now + 0.1            # a page keeps updating while paused
+                self._draw_body()
+        finally:                                        # one bad frame must not stop the game
+            if not self._dead:
+                self.root.after(TICK_MS, self._game_tick)
 
     def _advance(self, dt: float) -> None:
         """Called every frame while playing. Games override this."""
@@ -540,12 +600,16 @@ class GameApp(App):
 
     def _draw_body(self) -> None:
         key = self.screen.key
+        if key not in ("play", "paused") and self.page:
+            self._set_panel(None, redraw=False)         # leaving the game closes any page
         if key == "pain":
             super()._draw_body()
             return
         self.canvas.delete("body")
         if key in ("play", "paused", "end"):
             self._draw_field(dim=(key != "play"))
+            if self.page and key == "paused":
+                self._draw_panel()
         elif key == "summary":
             self._draw_summary()
 
@@ -562,6 +626,127 @@ class GameApp(App):
     def _hud(self, items) -> None:
         """Stat pills on the title row, right-aligned: [(label, value[, colour])]."""
         ui.chips(self.canvas, W - 24, 24, items, tags="body", align="right")
+
+    # ---- readings pages (the Hand and Face buttons) -------------------------
+
+    def _set_panel(self, mode, redraw: bool = True) -> None:
+        """Show the "hand" or "face" page, or None for the game. The face page starts the
+        camera preview, unless the face monitor (--face) already holds the camera."""
+        if mode != "face" and self._preview is not None:
+            self._preview.stop()                    # frees the camera
+            self._preview = None
+        if mode == "face" and self._face_thread is None and self._preview is None:
+            self._preview = FacePreview(cli.FACE.get("preview", 0))
+            self._preview.start()
+        self.page = mode
+        if redraw:
+            self._draw_body()
+
+    def _draw_panel(self) -> None:
+        c = self.canvas
+        x0, y0, x1, y1 = PANEL_BOX
+        # A layer over the game, not a separate section: mostly opaque, so the paused game
+        # still shows faintly through it.
+        ui.rrect(c, x0, y0, x1, y1, r=18, top=ui.BG, bottom=ui.BG, border=ui.LINE, alpha=0.93,
+                 tags="body")
+        c.create_text(x0 + 22, y0 + 24, text=self.page.upper(), anchor="w", fill=ui.ACCENT,
+                      font=ui.font(12, True), tags="body")
+        c.create_text(x1 - 22, y0 + 24, text="Paused. Green resumes", anchor="e", fill=DIM,
+                      font=ui.font(11), tags="body")
+        try:
+            if self.page == "hand":
+                self._draw_hand_page()
+            else:
+                self._draw_face_page()
+        except Exception as exc:        # shown in the page itself, so it is never just blank
+            c.create_text((x0 + x1) / 2, (y0 + y1) / 2, fill=ui.BAD, font=ui.font(12),
+                          width=x1 - x0 - 60, tags="body",
+                          text=f"This page could not be drawn:\n{type(exc).__name__}: {exc}")
+
+    def _tiles(self, items, cols: int, top: int, bottom: int) -> None:
+        """A table of (label, value, unit) rows between two heights, `cols` cells across.
+
+        One row per reading: the label on the left, the number big on the right with a
+        short unit after it. Wide and short, so nothing has to wrap or be cut off."""
+        c, (x0, _y0, x1, _y1) = self.canvas, PANEL_BOX
+        gap, pad = 10, 18
+        rows = -(-len(items) // cols)
+        w = (x1 - x0 - 2 * pad - gap * (cols - 1)) / cols
+        h = (bottom - top - gap * (rows - 1)) / rows
+        for i, (label, value, unit) in enumerate(items):
+            tx = x0 + pad + (i % cols) * (w + gap)
+            ty = top + (i // cols) * (h + gap)
+            mid = ty + h / 2
+            ui.rrect(c, tx, ty, tx + w, ty + h, r=12, top=ui.RAISED, bottom=ui.RAISED,
+                     border=ui.LINE, tags="body")
+            c.create_text(tx + 16, mid, text=label, anchor="w", fill=DIM,
+                          font=ui.font(13, True), tags="body")
+            c.create_text(tx + w - 68, mid, text=value, anchor="e", fill=FG,
+                          font=ui.font(24 if len(value) <= 7 else 18, True), tags="body")
+            c.create_text(tx + w - 60, mid + 3, text=unit, anchor="w", fill=ui.FAINT,
+                          font=ui.font(11), tags="body")
+
+    def _draw_hand_page(self) -> None:
+        role = self.driver
+        roll, pitch = self.angles.get(role), self.pitch_angles.get(role)
+        s = self.stats.get(role)
+        tremor = self.tremor_rms.get(role)
+        hand = self._last_hand.get(role) or {}
+
+        def num(v, spec):
+            return "--" if v is None else format(v, spec)
+
+        self._tiles([
+            ("Roll now", num(roll, "+.1f"), "deg"),
+            ("Pitch now", num(pitch, "+.1f"), "deg"),
+            ("Roll range", num(s and s.range_deg, ".0f"), "deg"),
+            ("Pitch range", num(s and s.pitch_range_deg, ".0f"), "deg"),
+            ("Peak speed", num(s and s.peak_dps, ".0f"), "deg/s"),
+            ("Tremor", num(tremor[-1] if tremor else None, ".1f"), "mg"),
+            ("Jerk", num(hand.get("jerk_peak"), ".0f"), ""),
+            ("Range of motion", num(hand.get("rom"), ".0f"), "deg"),
+        ], cols=2, top=PANEL_BOX[1] + 46, bottom=PANEL_BOX[3] - 16)
+
+    def _draw_face_page(self) -> None:
+        c, (x0, y0, x1, y1) = self.canvas, PANEL_BOX
+        monitor = self._face_thread is not None
+        if monitor:                                  # the monitor has the camera: numbers only
+            face = self._last_face or {}
+            if face.get("state") == "no_face":
+                state = "not seen"
+            elif face.get("pspi_mean") is None:
+                state = "learning"
+            else:
+                state = "tracking"
+            pspi, bpm = face.get("pspi_mean"), face.get("bpm")
+            self._tiles([
+                ("Pain expression (PSPI)", "--" if pspi is None else f"{pspi:.1f}", ""),
+                ("Heart rate", "--" if bpm is None else f"{bpm:.0f}", "bpm"),
+                ("Face", state, ""),
+            ], cols=1, top=y0 + 46, bottom=y1 - 62)
+            c.create_text(x0 + 22, y1 - 34, anchor="w", fill=ui.FAINT, font=ui.font(11),
+                          text="No video while the face monitor is using the camera.",
+                          tags="body")
+            return
+        # Video: a live picture, nothing stored.
+        vx, vy, vw, vh = x0 + 18, y0 + 46, 316, 237
+        ui.rrect(c, vx, vy, vx + vw, vy + vh, r=14, top=ui.BG, bottom=ui.BG, border=ui.LINE,
+                 tags="body")
+        got = self._preview.latest() if self._preview is not None else None
+        if got is not None:
+            self._face_photo = ImageTk.PhotoImage(got[0].resize((vw - 8, vh - 8)))
+            c.create_image(vx + 4, vy + 4, image=self._face_photo, anchor="nw", tags="body")
+        else:
+            problem = self._preview.error if self._preview is not None and self._preview.error \
+                else "Opening the camera..."
+            c.create_text(vx + vw / 2, vy + vh / 2, text=problem, fill=DIM, font=ui.font(12),
+                          width=vw - 30, tags="body")
+        c.create_text(vx + vw + 26, vy + 8, anchor="nw", fill=FG, font=ui.font(14, True),
+                      text="Live picture", tags="body")
+        c.create_text(vx + vw + 26, vy + 40, anchor="nw", fill=DIM, font=ui.font(12),
+                      width=x1 - (vx + vw + 26) - 22, tags="body",
+                      text="Nothing is saved.\n\nFor pain-expression and heart-rate numbers, "
+                           "turn on Face numbers in games (Settings on the OG, or --face).")
 
     def _paused_overlay(self) -> None:
         """Veil the arena and say so. Called last by each game's _draw_field."""
@@ -644,16 +829,19 @@ def _cancel_pending(widget) -> None:
     Tk timers outlive the window that made them; when one fires after its window is
     destroyed, Tk shows an 'invalid command name' error box. The shell closes game
     windows while it keeps running, so it must cancel them first."""
-    mine, stack = set(), [widget]
+    owner, stack = {}, [widget]                  # Tcl command name -> the widget that registered it
     while stack:
         w = stack.pop()
-        mine.update(getattr(w, "_tclCommands", None) or ())
+        for name in getattr(w, "_tclCommands", None) or ():
+            owner[name] = w
         stack.extend(w.winfo_children())
     tk_ = widget.tk
     for after_id in tk_.splitlist(tk_.call("after", "info")):
         script = tk_.splitlist(tk_.call("after", "info", after_id))[0]
-        if script in mine:
-            widget.after_cancel(after_id)
+        w = owner.get(script)
+        if w is not None:
+            tk_.call("after", "cancel", after_id)
+            w.deletecommand(script)              # through its owner, so its own list forgets it
 
 
 def build_game_args(description: str):

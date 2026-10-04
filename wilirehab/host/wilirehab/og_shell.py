@@ -215,6 +215,7 @@ class Shell:
             top = tk.Toplevel(self.root)
             cli.SHELL.update(link=self.link, on_exit=self._game_closed)
             cli.FACE["camera"] = self.camera if self.menu.face_in_games else None
+            cli.FACE["preview"] = self.camera
             ports = {ROLE: self.link.port} if self.link else {}
             self.game = mod.build(top, ports, args)
             # The OG shows a picture of this window, so it must be on the main monitor and on

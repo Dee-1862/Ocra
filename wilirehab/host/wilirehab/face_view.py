@@ -85,5 +85,7 @@ class FacePreview:
                     self._stop.wait(max(0.0, 1.0 / FPS - (time.monotonic() - t0)))
             finally:
                 cap.release()
+        except ImportError:
+            self.error = "The camera needs OpenCV. In the venv: python -m pip install opencv-python"
         except Exception as exc:                 # shown on the OG, not swallowed
             self.error = f"{type(exc).__name__}: {exc}"

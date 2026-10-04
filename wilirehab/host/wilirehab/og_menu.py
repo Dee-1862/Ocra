@@ -28,7 +28,7 @@ from .og_theme import other
 
 HOME, SETTINGS, FACE = "home", "settings", "face"
 
-VISIBLE_ROWS = 3          # list rows that fit between the header and the legend
+VISIBLE_ROWS = 4          # list rows that fit between the header and the legend
 
 BRIGHTNESS_STEPS = (25, 50, 75, 100)             # percent; the OG itself never goes below 10
 SOUND_LEVELS = ("off", "low", "medium", "high")

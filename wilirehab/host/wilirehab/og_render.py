@@ -18,11 +18,12 @@ from .og_theme import THEMES, Theme, mix
 
 W2, H2 = 640, 480                 # drawing size
 OG_W, OG_H = 320, 240             # what the panel shows
-LEGEND_Y = 384
-RADIUS = 24
+LEGEND_Y = 418                    # the same numbers as mapping_demo, so PC and OG agree
+RADIUS = 16
+LEGEND_TOP = 388
 CIRCLE_X = [W2 * (2 * i + 1) / (2 * len(BUTTONS)) for i in range(len(BUTTONS))]
-LIST_TOP, ROW_H, ROW_BOX = 126, 68, 60   # 3 rows fit between the header and the legend (332)
-FACE_BOX = (24, 8, 450, 328)      # where the camera picture goes, 426x320
+LIST_TOP, ROW_H, ROW_BOX = 126, 66, 58   # 4 rows fit between the header and the legend
+FACE_BOX = (24, 8, 450, 328)      # where the camera picture goes, 426x320 (the legend starts at 388)
 FLASH_SECONDS = 0.18              # how long a pressed button stays dark
 
 _FONTS = {True: ("segoeuisb.ttf", "seguisb.ttf", "arialbd.ttf", "DejaVuSans-Bold.ttf"),
@@ -54,7 +55,7 @@ def _panel(d, box, theme: Theme, r: int = 20, fill=None, outline=None, width: in
 
 
 def _legend(d, theme: Theme, legend: dict, flash) -> None:
-    _panel(d, (16, 332, W2 - 16, H2 - 14), theme)
+    _panel(d, (16, LEGEND_TOP, W2 - 16, H2 - 12), theme, r=18)
     pressed = flash[0] if flashing(flash) else None
     for i, button in enumerate(BUTTONS):
         x, label = CIRCLE_X[i], legend.get(button)
@@ -68,7 +69,7 @@ def _legend(d, theme: Theme, legend: dict, flash) -> None:
                       outline=mix(color, theme.surface, 0.72), width=3)
         text = label or "not used"
         fnt = font(21, True) if label else font(18)
-        d.text((x, LEGEND_Y + RADIUS + 24), text, font=fnt, anchor="mm",
+        d.text((x, LEGEND_Y + RADIUS + 20), text, font=fnt, anchor="mm",
                fill=theme.fg if label else theme.faint)
 
 
@@ -110,10 +111,10 @@ def render_menu(menu: Menu, theme_name: str = None, flash=None) -> Image.Image:
             value_w = int(d.textlength(row.value, font=font(26, True))) + 24
         text_w = (W2 - 44) - 46 - 20 - value_w                 # inside the box, with margins
         # Anchored by baseline ("ls"), so the two lines cannot drift into each other.
-        d.text((46, y0 + 28), fit_text(d, row.title, font(26, True), text_w),
+        d.text((46, y0 + 27), fit_text(d, row.title, font(26, True), text_w),
                font=font(26, True), anchor="ls", fill=theme.fg)
         if row.sub:
-            d.text((46, y0 + 50), fit_text(d, row.sub, font(16), text_w),
+            d.text((46, y0 + 48), fit_text(d, row.sub, font(16), text_w),
                    font=font(16), anchor="ls", fill=theme.dim)
     if total > len(rows):                                    # a thin scroll bar
         track = (W2 - 32, LIST_TOP, W2 - 26, LIST_TOP + ROW_H * len(rows) - (ROW_H - ROW_BOX))

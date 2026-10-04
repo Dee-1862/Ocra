@@ -14,6 +14,11 @@ def test_button_order_matches_the_bsp():
     assert bm.BUTTONS == ("gray", "yellow", "green", "blue", "red")
 
 
+def test_pain_buttons_run_from_minus_two_to_plus_two_with_green_confirming():
+    pain = bm.SCREENS_BY_KEY["pain"].actions
+    assert [pain[b] for b in bm.BUTTONS] == ["-2", "-1", "OK", "+1", "+2"]
+
+
 def test_problems_catches_a_long_label(monkeypatch):
     bad = bm._screen("x", "X", "x", None, None, "A label that is far too long", None, "Back")
     monkeypatch.setattr(bm, "SCREENS", bm.SCREENS + (bad,))

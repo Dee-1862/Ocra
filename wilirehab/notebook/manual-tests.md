@@ -309,6 +309,8 @@ python -m pytest tests/test_pspi.py tests/test_face_strain.py tests/test_hrv.py 
 **Report:** "Card 24: pass" or the first failure line.
 
 ## Card 25: The OG as the screen (menu, games, face view, dark/light, brightness, sound)
+**Camera needs OpenCV** (for the Face view and the Face page): with the venv active, `python -m pip install opencv-python`. If it is missing, the screen says so instead of showing a picture.
+
 **Needs a rebuild and reflash** (the OG gained `BRIGHT` and `BEEP`, and the red-hold light changed). Do this first, with only the OG plugged in:
 ```
 fw build wilirehab_main
@@ -342,7 +344,12 @@ python -m wilirehab.og_shell
 (or `--port COM11` with the display CPU's port.)
 1. **Menu:** the OG shows the game list in the same style as the laptop. Red = down, gray = up, green = open. Blue switches dark/light. Yellow opens Settings, then yellow goes back.
 2. **Game:** green on Brick Break. The OG should show the game; tilt the OG and the paddle moves on both screens. Note the frame rate you see (smooth, choppy, about N frames a second).
-3. **Leaving:** press `e` (laptop) to end, then play through pain check-in to the summary. Red ("Back") returns to the OG menu. Green ("Done") plays again.
+3. **In-game buttons (all on the OG, no laptop keys):** while a game plays, gray = Face, yellow = Hand, green = Pause, blue = Pain now (logs "this hurts"), red = End.
+   - **Hand:** a full-size page of 8 numbers (roll, pitch, ranges, peak speed, tremor, jerk, range of motion). The game pauses while it shows. Press yellow again or green to close it.
+   - **Face:** the live camera picture (mirrored, nothing saved). If you started with "Face numbers in games" on, the camera belongs to the face monitor, so you get pain-expression and heart-rate numbers instead of video.
+   - Paused: green = Resume, blue = Re-zero (current pose becomes neutral), red = Restart (fresh round, the old one's numbers are saved).
+   Check that the circles are small and the text on the pages is easy to read on the OG.
+   **Leaving:** red (End) then green (End now), pain check-in, then the summary: green = Restart, red = Menu (back to the OG menu).
 4. **Face view:** open "Face view" (last row). Your face should appear, mirrored. Yellow goes back and the camera light goes off.
 5. **Light theme in a game:** press blue on the menu to go light, then start a game. The OG shows a light version of the game. It is an approximation (inverted brightness), so say if it looks wrong.
 6. **Close** the shell window: the OG shows "WiliRehab closed on the laptop".

@@ -81,9 +81,11 @@ class BrickApp(GameApp):
         source = self.pitch_angles if self.movement == "pitch" else self.angles
         return source.get(self.driver)
 
+    def _rezero(self) -> None:
+        self.autorange.reset()                # learn the range again from this pose
+        super()._rezero()
+
     def _on_key(self, event) -> None:
-        if event.char == "z":
-            self.autorange.reset()            # learn the range again from this pose
         if event.char in ("l", "r") and not self._fixed_range:
             self.status.configure(text="The range is learned as you play. Use --fixed-range "
                                        "if you want to set it with l and r.")

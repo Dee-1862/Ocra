@@ -6,12 +6,10 @@ set with `BAR <0..100>`. Everything here is laptop-side and pure, so it can be
 tested without a board. `OgScreenWriter` turns a finished screen into the
 fewest commands.
 
-Button rule (the same one the game window applies): a game that needs the
-buttons (Colour Reflex) takes OG presses all the time. Every other game
-ignores OG presses while it is being played or paused, and takes them again
-on the screens at the end of the game: the end confirmation, the pain
-check-in and the summary. Presses from the laptop keyboard and the on-screen
-buttons are never blocked; the therapist uses those to pause and end.
+Button rule: every OG press counts on every screen. (Tilt games used to ignore
+the buttons while playing so a gripping hand could not press one by accident.
+That made Pause and End unusable from the OG, so it was dropped: a stray red
+press only asks "end the game?", and green must confirm it.)
 """
 from __future__ import annotations
 
@@ -29,8 +27,8 @@ STATUS = {
 
 
 def buttons_live(uses_buttons: bool, screen_key: str) -> bool:
-    """Whether a press on the OG should do anything on this screen."""
-    return uses_buttons or screen_key not in PLAY_SCREENS
+    """Whether a press on the OG should do anything on this screen (always: see above)."""
+    return True
 
 
 def fit(text) -> str:
@@ -83,7 +81,6 @@ def compose(*, name, screen_key, screen_title="", uses_buttons=False, game_lines
     rows[0] = fit(name)
     rows[1] = fit(STATUS.get(screen_key, screen_title.upper()))
     bar = None
-    live = buttons_live(uses_buttons, screen_key)
 
     if screen_key in PLAY_SCREENS:
         for i, line in enumerate(list(game_lines)[:3]):
@@ -91,19 +88,19 @@ def compose(*, name, screen_key, screen_title="", uses_buttons=False, game_lines
         rows[5] = fit(hand)
         rows[6] = fit(face)
         if screen_key == "play":
-            rows[7] = "Press the colour" if uses_buttons else "Buttons: off"
+            rows[7] = "Press the colour" if uses_buttons else "Green: pause"
         else:
-            rows[7] = "Green: resume" if live else "Resume: laptop"
+            rows[7] = "Green: resume"
     elif screen_key == "end":
         rows[2], rows[3] = "Green: end now", "Red: keep going"
     elif screen_key == "pain":
         rows[2] = f"Score {int(pain)} of 10"
-        rows[3], rows[4], rows[5] = "Gray/Blue: +1", "Yellow/Red: -1", "Green: confirm"
+        rows[3], rows[4], rows[5] = "Gray -2 Yellow -1", "Blue +1  Red +2", "Green: OK"
         bar = max(0, min(100, int(pain) * 10))
     elif screen_key == "summary":
         for i, line in enumerate(list(summary_lines)[:4]):
             rows[2 + i] = fit_pair(line)
-        rows[7] = "Green: done"
+        rows[7] = "Green: restart"
     return rows, bar
 
 
