@@ -36,6 +36,7 @@ from statistics import median
 from PIL import ImageTk
 
 from . import cli, ui
+from .agent_link import AgentIngress
 from .align import LagFusion
 from .bilateral import HandStats, format_row, symmetry_report
 from .button_map import PAGE_OPEN, SCREENS, SCREENS_BY_KEY
@@ -152,6 +153,8 @@ class GameApp(App):
         self.links: dict = {}
         self._shared_link = cli.SHELL["link"]      # the OG shell's link, or None
         self._on_exit = cli.SHELL["on_exit"]
+        self._ingress = AgentIngress()             # hands numbers to the agents program, if running
+        self.session_id = ""
         self._dead = False                         # set by _close; stops every timer
         self.page = None                           # None, "hand" or "face": a readings page
         # (not `panel`: that is the live-data table widget, set further down)
@@ -167,6 +170,7 @@ class GameApp(App):
         self._last_tilt_log = 0.0
         Path(log_dir).mkdir(parents=True, exist_ok=True)
         stamp = time.strftime("%Y%m%d-%H%M%S")
+        self.session_id = stamp
         self.data = DataTable(Path(log_dir) / f"data-{stamp}.csv")
         self.session = TeeLog(SessionLog(Path(log_dir) / f"session-{stamp}.jsonl"), self.data)
         self._last = time.monotonic()
@@ -267,6 +271,7 @@ class GameApp(App):
                 self.data.add("face", "reading", at=at, **value)
                 self.fusion.add_face(at, value)
                 self._last_face = value
+                self._ingress.publish("face", None, value, session=self.session_id)
         except queue.Empty:
             pass
         for event in self.fusion.poll(self.data.now()):
@@ -422,6 +427,7 @@ class GameApp(App):
                 row = self.data.add("hand", "motion", role=role, **hand_row)
                 self.fusion.add_hand(row["t"], hand_row)
                 self._last_hand[role] = hand_row
+                self._ingress.publish("hand", role, hand_row, session=self.session_id)
         self._check_tremor(role, t_ms)
         self.data.add("og", "tilt", role=role, roll_deg=round(slow, 1),
                       pitch_deg=round(pitch, 1), steady=slow_tracker.steady)
@@ -485,6 +491,7 @@ class GameApp(App):
             elif label == "OK":                         # no more change: keep this score
                 self.last_pain = self.pain          # _go() resets self.pain
                 self.session.record("pain_score", value=self.pain)
+                self._publish_round(self.last_pain)
                 self._go("summary")
             return
 
@@ -516,6 +523,7 @@ class GameApp(App):
                 # Close this round's numbers properly, then start a fresh one.
                 self.session.record("restart", at_s=round(self.play_seconds, 1))
                 self._end_session()
+                self._publish_round(None)                   # no pain score for a restarted round
                 self._new_round()
                 self._set_panel(None, redraw=False)
                 self._go("play")
@@ -592,6 +600,28 @@ class GameApp(App):
                 hit_ratio=_round(ratio["Hit rate %"].ratio),
                 weaker_roll=ratio["Roll range"].weaker,
                 weaker_speed=ratio["Peak deg/s"].weaker)
+
+    def _publish_round(self, pain) -> None:
+        """Hand the agents one finished round: numbers only, never video or names."""
+        role = self.driver
+        s = self.stats.get(role)
+        tremor = self.tremor_rms.get(role)
+        face = self._last_face or {}
+        self._ingress.publish("round", role, {
+            "session_id": self.session_id,
+            "game": self.OG_NAME.lower().replace(" ", "_"),
+            "seconds": round(self.play_seconds, 1),
+            "hits": s.hits if s else 0,
+            "attempts": s.attempts if s else 0,
+            "roll_range_deg": round(s.range_deg, 1) if s else None,
+            "pitch_range_deg": round(s.pitch_range_deg, 1) if s else None,
+            "peak_dps": round(s.peak_dps, 1) if s else None,
+            "tremor_rms_mg": round(median(tremor), 1) if tremor else None,
+            "pain_events": self.pain_events,
+            "pain_score": pain,
+            "face_pspi": face.get("pspi_mean"),
+            "face_bpm": face.get("bpm"),
+        })
 
     def _trend_slope(self):
         """Change of the PERF value per minute over the session, or None."""

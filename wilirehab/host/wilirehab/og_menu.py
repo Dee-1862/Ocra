@@ -8,9 +8,10 @@ select, yellow back. Blue switches dark and light from any menu screen. Every ac
 single short press (red is never held: a 6 s red hold powers the OG off).
 
 Screens:
-    home      the games, then "Face view"      yellow opens settings
-    settings  theme, face numbers in games     yellow goes back
+    home      the games, "Face view", "Agents" yellow opens settings
+    settings  theme, brightness, sound, ...    yellow goes back
     face      live camera preview              yellow goes back
+    agents    live agent network (see og_render.render_agents)    yellow goes back
 
 `press()` returns None, or an action tuple for the shell to carry out:
     ("launch", module)   start that game
@@ -26,7 +27,7 @@ from dataclasses import dataclass
 from .button_map import BUTTONS
 from .og_theme import other
 
-HOME, SETTINGS, FACE = "home", "settings", "face"
+HOME, SETTINGS, FACE, AGENTS = "home", "settings", "face", "agents"
 
 VISIBLE_ROWS = 4          # list rows that fit between the header and the legend
 
@@ -34,11 +35,12 @@ BRIGHTNESS_STEPS = (25, 50, 75, 100)             # percent; the OG itself never 
 SOUND_LEVELS = ("off", "low", "medium", "high")
 SOUND_VOLUME = {"off": 0, "low": 3, "medium": 6, "high": 9}      # the speaker's own 0..10 scale
 
-TITLES = {HOME: "Choose a game", SETTINGS: "Settings", FACE: "Face view"}
+TITLES = {HOME: "Choose a game", SETTINGS: "Settings", FACE: "Face view", AGENTS: "Agents"}
 HINTS = {
     HOME: "Up and down, then green to play",
     SETTINGS: "Green changes the highlighted row",
     FACE: "Live preview, nothing is saved",
+    AGENTS: "The agent network, live",      # the shell replaces this with the live status
 }
 
 # screen -> button -> short label (at most 8 characters so it fits under its circle).
@@ -46,6 +48,7 @@ LEGENDS = {
     HOME: {"gray": "Up", "yellow": "Settings", "green": "Open", "blue": "Theme", "red": "Down"},
     SETTINGS: {"gray": "Up", "yellow": "Back", "green": "Change", "blue": "Theme", "red": "Down"},
     FACE: {"yellow": "Back", "blue": "Theme"},
+    AGENTS: {"yellow": "Back", "blue": "Theme"},
 }
 
 
@@ -89,6 +92,7 @@ class Menu:
         if self.screen == HOME:
             rows = [Row(g[0], g[1], g[2]) for g in self.games]
             rows.append(Row("face", "Face view", "See the camera on this screen"))
+            rows.append(Row("agents", "Agents", "Live view of the agent network"))
             return rows
         if self.screen == SETTINGS:
             return [
@@ -118,7 +122,7 @@ class Menu:
         if button == "blue":
             self.theme = other(self.theme)
             return None
-        if self.screen == FACE:
+        if self.screen in (FACE, AGENTS):
             return self._go(HOME) if button == "yellow" else None
         if button == "gray":
             self._move(-1)
@@ -151,7 +155,11 @@ class Menu:
     def _select(self):
         row = self.rows()[self.cursor[self.screen]]
         if self.screen == HOME:
-            return self._go(FACE) if row.key == "face" else ("launch", row.key)
+            if row.key == "face":
+                return self._go(FACE)
+            if row.key == "agents":
+                return self._go(AGENTS)
+            return ("launch", row.key)
         if row.key == "theme":
             self.theme = other(self.theme)
         elif row.key == "brightness":

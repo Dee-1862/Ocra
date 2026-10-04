@@ -12,6 +12,7 @@ from functools import lru_cache
 
 from PIL import Image, ImageDraw, ImageFont
 
+from .agent_graph import EDGES, LEVELS, NODES, edge_state
 from .button_map import BUTTONS, COLORS
 from .og_menu import Menu
 from .og_theme import THEMES, Theme, mix
@@ -143,6 +144,62 @@ def render_face(menu: Menu, picture: Image.Image = None, status: str = "", flash
     d.text((470, 54), "Live", font=font(30, True), fill=theme.fg)
     for i, line in enumerate(("Nothing is", "saved. Only", "numbers are,", "and only in", "games.")):
         d.text((470, 110 + 26 * i), line, font=font(18), fill=theme.dim)
+    _legend(d, theme, menu.legend(), flash)
+    return _finish(img)
+
+
+STATE_COLOR = {"ok": "#34d399", "idle": "#fbbf24", "lost": "#f87171"}     # "off" has no colour
+STATE_WORDS = {"off": "no data", "idle": "idle", "lost": "lost"}
+AGENT_Y = (146, 214, 282, 350)        # centres of the four levels
+AGENT_BOX = (190, 44)                 # box width and height
+AGENT_X = {"og": 235, "cam": 485, "hand_agent": 235, "face_agent": 485, "orch": 360, "db": 360}
+
+
+def render_agents(menu: Menu, snap: dict = None, flash=None) -> Image.Image:
+    """The agent network: four levels of boxes joined by lines, coloured by how alive each is.
+
+    `snap` is an aged status snapshot (agent_graph.age_snapshot) or None when the agents program
+    is not running. Green = passed something on in the last 3 s, amber = idle, red = lost,
+    a grey outline = never seen. A line takes the state of the part it comes from."""
+    theme = THEMES[menu.theme]
+    img = Image.new("RGB", (W2, H2), theme.bg)
+    d = ImageDraw.Draw(img)
+    nodes = (snap or {}).get("nodes", {})
+    decision = (snap or {}).get("decision")
+    if snap is None:
+        hint = "Not running: python -m wilirehab.agents_main"
+    elif decision:
+        hint = f"Policy: {decision['action']} ({decision['reason']})"
+    else:
+        hint = f"{snap.get('transport', 'Agents')}. No finished round yet"
+    _header(d, theme, menu.title, fit_text(d, hint, font(19), W2 - 70))
+
+    level_of = {key: level for key, _label, level in NODES}
+    half_h = AGENT_BOX[1] / 2
+    for a, b in EDGES:                                           # lines first, boxes cover the ends
+        d.line((AGENT_X[a], AGENT_Y[level_of[a]] + half_h, AGENT_X[b], AGENT_Y[level_of[b]] - half_h),
+               fill=STATE_COLOR.get(edge_state(nodes, a), theme.line), width=4)
+    for level, name in enumerate(LEVELS):
+        d.text((24, AGENT_Y[level]), name, font=font(16), anchor="lm", fill=theme.faint)
+    for key, label, level in NODES:
+        node = nodes.get(key, {})
+        state = node.get("state", "off")
+        color = STATE_COLOR.get(state)
+        cx, cy = AGENT_X[key], AGENT_Y[level]
+        box = (cx - AGENT_BOX[0] / 2, cy - half_h, cx + AGENT_BOX[0] / 2, cy + half_h)
+        _panel(d, box, theme, r=12, outline=color or theme.line)
+        dot = (box[2] - 26, cy - 8, box[2] - 10, cy + 8)
+        if color:
+            d.ellipse(dot, fill=color)
+        else:
+            d.ellipse(dot, outline=theme.faint, width=3)
+        room = AGENT_BOX[0] - 14 - 36
+        d.text((box[0] + 14, cy - 3), fit_text(d, label, font(20, True), room), font=font(20, True),
+               anchor="ls", fill=theme.fg)
+        sub = node.get("note") or (f"{node.get('rate', 0.0):.1f} msg/s" if state == "ok"
+                                   else STATE_WORDS[state])
+        d.text((box[0] + 14, cy + 17), fit_text(d, sub, font(15), room), font=font(15),
+               anchor="ls", fill=theme.dim)
     _legend(d, theme, menu.legend(), flash)
     return _finish(img)
 

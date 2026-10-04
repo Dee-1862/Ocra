@@ -29,13 +29,15 @@ from pathlib import Path
 from PIL import Image, ImageGrab, ImageTk
 
 from . import cli
+from .agent_graph import age_snapshot
+from .agent_link import read_status
 from .face_view import FacePreview
 from .launcher import GAMES
 from .og_display import OgDisplay
 from .og_link import OgLink
-from .og_menu import FACE, SOUND_VOLUME, Menu
-from .og_render import (CIRCLE_X, LEGEND_Y, OG_H, OG_W, RADIUS, flashing, render_face,
-                        render_menu, render_message)
+from .og_menu import AGENTS, FACE, SOUND_VOLUME, Menu
+from .og_render import (CIRCLE_X, LEGEND_Y, OG_H, OG_W, RADIUS, flashing, render_agents,
+                        render_face, render_menu, render_message)
 from .og_theme import THEMES, light_variant
 
 TICK_MS = 100                     # screen update rate while a game is mirrored
@@ -266,6 +268,17 @@ class Shell:
                 return None
             self._sig = sig
             return render_face(m, got[0] if got else None, problem, self._flash)
+        if m.screen == AGENTS:
+            # The agents program writes its status to a file; show it, redrawn once a second.
+            # A file older than 5 s means the agents program is not running.
+            now = time.time()
+            raw = read_status()
+            snap = age_snapshot(raw, now) if raw and now - raw["generated_at"] < 5.0 else None
+            sig = (AGENTS, int(now), m.theme, live)
+            if sig == self._sig and not live:
+                return None
+            self._sig = sig
+            return render_agents(m, snap, self._flash)
         sig = (m.screen, m.selected(), m.top[m.screen], m.theme, m.face_in_games, live)
         if sig == self._sig and not live:
             return None

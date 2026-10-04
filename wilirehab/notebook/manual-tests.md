@@ -365,6 +365,58 @@ python -m wilirehab.og_shell
 
 **Report:** paste the status line, the frame rate you saw for Brick Break, and anything from 1-6 that did not match.
 
+## Card 26: Agents (Fetch.ai uAgents) on the laptop, the OG's Agents page, Supabase
+**What it is:** three uAgents (hand, face, orchestrator) run in one program on the laptop. The games hand them numbers; the orchestrator turns each finished round into a row, applies the rule table (adapt.py) for a difficulty *recommendation* (logged and shown, not yet applied to the games), and saves rows locally and to Supabase. The OG's new **Agents** page shows the levels and links live. The OG is not an agent: the "hand agent" is software on the laptop.
+
+**A. One-time setup (you do this)**
+1. In the venv: `python -m pip install uagents`
+2. Supabase: create a project (supabase.com, free tier is fine). Open **SQL Editor**, paste all of `wilirehab/host/supabase_schema.sql`, run it. Expect "Success. No rows returned".
+3. Supabase **Project Settings -> API**: copy the **Project URL** and the **anon public** key. Do **not** use the service_role key.
+4. Copy `wilirehab/host/.env.example` to `wilirehab/host/.env` and fill in: `SUPABASE_URL`, `SUPABASE_KEY` (the anon key), `WILIREHAB_PARTICIPANT` (a code like P001, not a name), `WILIREHAB_SEED` (any long random phrase). Nothing else is needed: no ASI:One key, no Agentverse mailbox.
+   Leave the two Supabase lines empty to try everything first without a database.
+
+**B. Host tests (no network)**
+```
+cd wilirehab/host
+python -m pytest tests/test_agent_parts.py tests/test_og_shell_parts.py -q
+```
+**Expect:** all pass. **If it fails:** paste the first `FAILED` block.
+
+**C. Run it (three terminals, from `wilirehab/host`, venv active)**
+1. `python -m wilirehab.agents_main`
+   **Expect:** three lines "Orchestrator agent1...", "Hand agent agent1...", "Face agent agent1...", then "Supabase: configured" (or "not configured"). Warnings about registering with the Almanac are fine without internet. **If it stops with an error,** paste it: this is the first run against a real uAgents install.
+2. `python -m wilirehab.og_shell` -> OG menu -> down to **Agents** -> green.
+   **Expect:** four rows of boxes (Devices / Sensing / Policy / Storage). Before you play: Orchestrator may show idle, others "no data", Supabase "sent n" or "not configured". The hint line says "No finished round yet".
+3. Play a game from the menu (green), then watch the agent terminal. While you play, `OG hand` and `Hand agent` should go green with a message rate. End the game: **End** (red), **End now** (green), set the pain with the -2 -1 OK +1 +2 buttons, **OK**.
+   **Expect in the agents terminal:** a line `round: brick_break hit_rate=... -> push/hold/ease (...)`. Back on the OG Agents page the hint shows `Policy: <action> (<reason>)`.
+4. In Supabase: **Table Editor -> rounds**. **Expect** one new row per finished round, within about 5 seconds.
+**If rows do not arrive:** the agents terminal prints `Supabase send failed: ...`. The rows stay queued in `agents_queue.jsonl` and are sent later; paste the message. A 401 or 403 means the wrong key or the SQL policy was not run.
+
+**D. Optional: show a gateway agent in your Agentverse (mailbox)**
+Only do this if you are happy for one agent to be registered with Fetch.ai's Agentverse. The first attempt put a mailbox on the orchestrator inside the Bureau, and Agentverse's Inspector answered "Could not find this Agent on your local host": it expects a standalone agent on its own port. So there is now a separate **gateway agent** (`agent_gateway.py`, port 8001). It only receives messages from outside agents you allow and hands them to the local program. The games' hand and face numbers never go through it.
+1. Sign up at agentverse.ai.
+2. Keep `python -m wilirehab.agents_main` running. In a second terminal (same folder, venv active): `python -m wilirehab.agent_gateway`.
+3. **Expect** `Gateway agent1q...`, an `Allowed senders:` line (it says "none yet" until you fill in `WILIREHAB_ALLOWED_SENDERS`), uAgents' own `Agent inspector available at ...` line, and my `https://agentverse.ai/inspect/...` link. Open the link while it runs, click **Connect**, choose **Mailbox**, follow the steps.
+4. **Expect** the terminal to say it registered as a mailbox agent, and `wilirehab_gateway` to appear in your Agentverse agents.
+5. To let the Pi in later: put the Pi agent's `agent1q...` address in `WILIREHAB_ALLOWED_SENDERS` in `.env`, restart the gateway. A message it accepts is logged as `passed a 'round' message from ...`.
+**If it fails:** paste the terminal output from the gateway.
+
+**E. Send a message in through the gateway (the Pi's job, rehearsed on the laptop)**
+1. Gateway and `agents_main` running. In a third terminal: `python -m wilirehab.agent_test_client agent1q...` (the gateway's address from its `Gateway ...` line).
+2. **Expect:** the client logs `my address (add it to WILIREHAB_ALLOWED_SENDERS): agent1q...`. Copy that address into `WILIREHAB_ALLOWED_SENDERS=` in `.env`, stop and restart **only the gateway**, then run the client again.
+3. **Expect, in order:** client `sent one test round...`; gateway `passed a 'round' message from agent1q...`; client `the gateway acknowledged...`; `agents_main` terminal `round: gateway_test hit_rate=0.8 -> ...`. In Supabase a `rounds` row with game `gateway_test` (delete it after).
+**If the gateway says `ignored a message from ... not in WILIREHAB_ALLOWED_SENDERS`:** the address was not saved or the gateway was not restarted. **If nothing arrives at all:** paste the client and gateway output.
+
+**F. One table per agent, and picking the data up**
+Three tables now: `rounds` (orchestrator), `hand_readings` (hand agent), `face_readings` (face agent). The hand and face agents save one snapshot every `WILIREHAB_SAMPLE_S` seconds (default 5). The face table holds webcam-derived numbers: only with the person's informed consent.
+1. **Create the two new tables:** in Supabase SQL Editor, paste the whole of `supabase_schema.sql` again and run it (every statement is safe to repeat). **Expect** `hand_readings` and `face_readings` in Table Editor.
+2. Restart `python -m wilirehab.agents_main`. **Expect** the `Supabase:` line to name the three tables and the snapshot interval.
+3. Play a game from the OG menu for about 30 seconds. **Expect** `sent N hand row(s) to Supabase` in the agents terminal every 5 seconds or so (and `face` rows if the webcam is on), and new rows in `hand_readings` with `jerk_peak`, `rom` and the full reading in `data`.
+4. **Picking up (a trusted machine only):** in Supabase, **Project Settings, API, service_role key**. Put it in `SUPABASE_SERVICE_KEY` in the `.env` of the trusted machine (the Pi), never on the laptop that plays, never in git. Then `python -m wilirehab.supabase_pull hand_readings 5`. **Expect** the 5 newest rows printed.
+**If a table's send fails:** the warning names the table (`Supabase send failed (hand): ...`) and its rows stay queued locally.
+
+**Report:** paste the three address lines, one `round:` line, what the Agents page showed (a photo is fine), and whether a row appeared in Supabase.
+
 ## Results log
 | Date | Card | Result | Notes |
 |---|---|---|---|
