@@ -10,6 +10,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
+from . import ui
 from .data_panel import BG, DIM, FG, PANEL, short_role
 
 REFRESH_MS = 250
@@ -71,11 +72,12 @@ class DiscomfortPanel(tk.Frame):
     def __init__(self, parent, table, face_on: bool):
         super().__init__(parent, bg=BG)
         self._pending = {"face": [], "hand": []}
+        self._count = {"face": 0, "hand": 0}
         self._style()
-        face_title = ("Face: PSPI, pulse, HRV (per second)" if face_on
-                      else "Face: camera off (run with --face)")
+        face_title = ("Face: PSPI, pulse and HRV, once a second" if face_on
+                      else "Face: camera off \u2014 start the game with --face")
         self.face = self._table(0, face_title, FACE_COLUMNS)
-        self.hand = self._table(1, "Hand: jerk m/s^3 and range of motion deg (per second)",
+        self.hand = self._table(1, "Hand: jerk (m/s\u00b3) and range of motion (deg), once a second",
                                 HAND_COLUMNS)
         self.columnconfigure(0, weight=3)
         self.columnconfigure(1, weight=2)
@@ -84,25 +86,27 @@ class DiscomfortPanel(tk.Frame):
 
     def _table(self, column: int, title: str, columns):
         box = tk.Frame(self, bg=BG)
-        box.grid(row=0, column=column, sticky="nsew", padx=(0 if column == 0 else 8, 0))
-        tk.Label(box, text=title, bg=BG, fg=FG,
-                 font=("Segoe UI", 10, "bold")).pack(anchor="w")
-        tree = ttk.Treeview(box, style="Disc.Treeview", show="headings", height=7,
+        box.grid(row=0, column=column, sticky="nsew", padx=(0 if column == 0 else 12, 0))
+        name, _, detail = title.partition(": ")
+        head = tk.Frame(box, bg=BG)
+        head.pack(fill="x", pady=(0, 4))
+        tk.Label(head, text=name.upper(), bg=BG, fg=ui.ACCENT,
+                 font=ui.font(9, True)).pack(side="left", padx=2)
+        tk.Label(head, text=detail, bg=BG, fg=ui.FAINT, font=ui.font(9)).pack(side="left", padx=8)
+        frame = ui.framed(box)
+        frame.pack(fill="x")
+        tree = ttk.Treeview(frame, style="Disc.Treeview", show="headings", height=6,
                             columns=[c[0] for c in columns])
         for key, label, width in columns:
             tree.heading(key, text=label)
             tree.column(key, width=width, anchor="w", stretch=False)
-        tree.pack(fill="x", pady=(2, 0))
+        tree.tag_configure("odd", background=ui.ZEBRA)
+        tree.pack(fill="x")
         return tree
 
     @staticmethod
     def _style() -> None:
-        style = ttk.Style()
-        style.configure("Disc.Treeview", background=PANEL, fieldbackground=PANEL,
-                        foreground=FG, borderwidth=0, rowheight=18, font=("Consolas", 9))
-        style.configure("Disc.Treeview.Heading", background="#21262d", foreground=FG,
-                        relief="flat", font=("Segoe UI", 8, "bold"))
-        style.map("Disc.Treeview", background=[("selected", "#30363d")])
+        ui.style_tables()
 
     def _on_row(self, row: dict) -> None:
         if row["source"] == "face" and row["channel"] == "reading":
@@ -115,7 +119,9 @@ class DiscomfortPanel(tk.Frame):
                                    ("hand", self.hand, hand_values)):
             rows, self._pending[name] = self._pending[name], []
             for row in rows:
-                tree.insert("", 0, values=values(row))
+                self._count[name] += 1
+                tree.insert("", 0, values=values(row),
+                            tags=("odd",) if self._count[name] % 2 else ())
             for iid in tree.get_children()[MAX_ROWS:]:
                 tree.delete(iid)
         self.after(REFRESH_MS, self._refresh)

@@ -17,11 +17,8 @@ from pathlib import Path
 
 HOST_DIR = Path(__file__).resolve().parents[1]      # wilirehab/host
 
-BG = "#0d1117"
-PANEL = "#161b22"
-FG = "#e6edf3"
-DIM = "#8b949e"
-GREEN = "#22c55e"
+from . import ui
+from .ui import BG, DIM, FG, PANEL
 
 # (module, name, what you do, movement or measure it uses)
 GAMES = (
@@ -63,37 +60,68 @@ class Launcher:
         self.root = root
         root.title("WiliRehab games")
         root.configure(bg=BG)
-        tk.Label(root, text="WiliRehab games", bg=BG, fg=FG,
-                 font=("Segoe UI", 18, "bold")).grid(row=0, column=0, columnspan=3,
-                                                     sticky="w", padx=16, pady=(14, 6))
-        for i, (module, name, what, movement) in enumerate(GAMES):
-            row = i + 1
-            tk.Button(root, text=name, width=14, bg=PANEL, fg=FG, activebackground=GREEN,
-                      relief="flat", font=("Segoe UI", 11, "bold"),
-                      command=lambda m=module: self.start(m)).grid(
-                row=row, column=0, padx=(16, 8), pady=4, sticky="w")
-            tk.Label(root, text=what, bg=BG, fg=FG, font=("Segoe UI", 10),
-                     anchor="w").grid(row=row, column=1, sticky="w", padx=4)
-            tk.Label(root, text=movement, bg=BG, fg=DIM, font=("Segoe UI", 9),
-                     anchor="w", wraplength=330, justify="left").grid(
-                row=row, column=2, sticky="w", padx=(8, 16))
-        last = len(GAMES) + 1
-        tk.Label(root, text="Options for the next game:", bg=BG, fg=DIM,
-                 font=("Segoe UI", 9)).grid(row=last, column=0, columnspan=2, sticky="w",
-                                            padx=16, pady=(12, 0))
-        self.options = tk.Entry(root, bg=PANEL, fg=FG, insertbackground=FG, relief="flat",
-                                font=("Consolas", 10))
-        self.options.grid(row=last + 1, column=0, columnspan=3, sticky="ew", padx=16)
-        self.devices = tk.Label(root, text=device_summary(), bg=BG, fg=DIM, justify="left",
-                                font=("Consolas", 9), anchor="w")
-        self.devices.grid(row=last + 2, column=0, columnspan=2, sticky="w", padx=16, pady=10)
-        tk.Button(root, text="Check devices again", bg=PANEL, fg=FG, relief="flat",
-                  font=("Segoe UI", 9),
-                  command=lambda: self.devices.configure(text=device_summary())).grid(
-            row=last + 2, column=2, sticky="e", padx=16)
-        self.message = tk.Label(root, text="", bg=BG, fg=DIM, font=("Segoe UI", 9))
-        self.message.grid(row=last + 3, column=0, columnspan=3, sticky="w", padx=16, pady=(0, 10))
-        root.columnconfigure(2, weight=1)
+        ui.style_tables()
+        self.face = tk.BooleanVar(value=False)
+
+        body = tk.Frame(root, bg=BG)
+        body.pack(fill="both", expand=True, padx=28, pady=24)
+        tk.Label(body, text="WILIREHAB", bg=BG, fg=ui.ACCENT,
+                 font=ui.font(10, True)).pack(anchor="w")
+        tk.Label(body, text="Choose a game", bg=BG, fg=FG,
+                 font=ui.font(24, True)).pack(anchor="w", pady=(0, 2))
+        tk.Label(body, text="Tilt, flick or press. Each game opens in its own window.", bg=BG,
+                 fg=DIM, font=ui.font(11)).pack(anchor="w", pady=(0, 16))
+
+        for module, name, what, movement in GAMES:
+            self._card(body, module, name, what, movement)
+
+        opts = tk.Frame(body, bg=BG)
+        opts.pack(fill="x", pady=(16, 0))
+        tk.Checkbutton(opts, text="Use the webcam for the face table (--face)",
+                       variable=self.face, bg=BG, fg=FG, selectcolor=ui.SURFACE,
+                       activebackground=BG, activeforeground=FG, highlightthickness=0,
+                       font=ui.font(10)).pack(anchor="w")
+        tk.Label(opts, text="EXTRA OPTIONS FOR THE NEXT GAME", bg=BG, fg=ui.FAINT,
+                 font=ui.font(8, True)).pack(anchor="w", pady=(10, 3))
+        self.options = tk.Entry(opts, bg=ui.SURFACE, fg=FG, insertbackground=FG, relief="flat",
+                                font=ui.mono(10), highlightthickness=1,
+                                highlightbackground=ui.LINE, highlightcolor=ui.ACCENT)
+        self.options.pack(fill="x", ipady=6)
+
+        foot = tk.Frame(body, bg=BG)
+        foot.pack(fill="x", pady=(16, 0))
+        self.devices = tk.Label(foot, text=device_summary(), bg=BG, fg=DIM, justify="left",
+                                font=ui.mono(9), anchor="w")
+        self.devices.pack(side="left")
+        self._button(foot, "Check devices", lambda: self.devices.configure(text=device_summary()),
+                     quiet=True).pack(side="right", anchor="n")
+        self.message = tk.Label(body, text="", bg=BG, fg=DIM, font=ui.font(9), anchor="w")
+        self.message.pack(fill="x", pady=(8, 0))
+
+    @staticmethod
+    def _button(parent, text, command, quiet=False):
+        """A flat button that lightens on hover."""
+        base, hover = (ui.RAISED, ui.SURFACE_TOP) if quiet else (ui.ACCENT, ui.lighten(ui.ACCENT, 0.18))
+        label = tk.Label(parent, text=text, bg=base, fg=FG if quiet else BG, cursor="hand2",
+                         font=ui.font(10, True), padx=18, pady=7)
+        label.bind("<Enter>", lambda e: label.configure(bg=hover))
+        label.bind("<Leave>", lambda e: label.configure(bg=base))
+        label.bind("<Button-1>", lambda e: command())
+        return label
+
+    def _card(self, parent, module, name, what, movement) -> None:
+        frame = ui.framed(parent)
+        frame.pack(fill="x", pady=5)
+        card = tk.Frame(frame, bg=ui.SURFACE)
+        card.pack(fill="x")
+        text = tk.Frame(card, bg=ui.SURFACE)
+        text.pack(side="left", fill="x", expand=True, padx=18, pady=12)
+        tk.Label(text, text=name, bg=ui.SURFACE, fg=FG, font=ui.font(14, True),
+                 anchor="w").pack(anchor="w")
+        tk.Label(text, text=what, bg=ui.SURFACE, fg=FG, font=ui.font(10), anchor="w").pack(anchor="w")
+        tk.Label(text, text=movement, bg=ui.SURFACE, fg=ui.FAINT, font=ui.font(9), anchor="w",
+                 wraplength=520, justify="left").pack(anchor="w", pady=(2, 0))
+        self._button(card, "Play", lambda m=module: self.start(m)).pack(side="right", padx=18)
 
     def start(self, module: str) -> None:
         try:
@@ -101,6 +129,8 @@ class Launcher:
         except ValueError as exc:
             self.message.configure(text=f"Options not understood: {exc}")
             return
+        if self.face.get() and "--face" not in extra:
+            extra.append("--face")
         cmd = [sys.executable, "-m", f"wilirehab.{module}", *extra]
         try:
             subprocess.Popen(cmd, cwd=HOST_DIR)

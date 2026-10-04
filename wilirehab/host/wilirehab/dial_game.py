@@ -19,19 +19,21 @@ from __future__ import annotations
 
 import tkinter as tk
 
+from . import ui
 from .game_base import FIELD, GameApp, build_game_args
 from .cli import parse_roles, resolve_ports
 from .dial import DialRound, needle_end
 from .mapping_demo import DIM, FG, PANEL, blend
 
-NEEDLE = "#22c55e"
-TARGET = "#f5c400"
+NEEDLE = "#34d399"
+TARGET = "#fbbf24"
 NUDGE_DEG = 5.0
 RADIUS = 125
 
 
 class DialApp(GameApp):
     TITLE = "WiliRehab dial"
+    OG_NAME = "DIAL"
     PERF = ("Time to reach", "s", 1.0, 0.5, False)       # lower is better
 
     def __init__(self, root: tk.Tk, ports: dict, log_dir, axis="y", invert_roles=(),
@@ -89,6 +91,11 @@ class DialApp(GameApp):
                                 tolerance=self.dial.tolerance)
             self._since_target = 0.0
 
+    def _og_lines(self) -> list:
+        d = self.dial
+        return [f"Done {d.completed}", f"Timed out {d.timeouts}",
+                f"Dial {self._angle():+.0f} Tgt {d.target:+.0f}"]
+
     # ---- drawing -------------------------------------------------------
 
     def _draw_field(self, dim: bool) -> None:
@@ -100,39 +107,36 @@ class DialApp(GameApp):
         def shade(color):
             return blend(color, PANEL, 0.6) if dim else color
 
-        def arc(radius, a0, a1, color, width):
-            # Our angle: 0 is up, clockwise is positive. Tk: 0 is 3 o'clock, anticlockwise.
-            c.create_arc(cx - radius, cy - radius, cx + radius, cy + radius,
-                         start=90 - a1, extent=a1 - a0, style="arc",
-                         outline=color, width=width, tags="body")
-
-        c.create_rectangle(x0, y0, x1, y1, outline="#30363d", tags="body")
-        arc(r, -self.dial_range, self.dial_range, shade("#30363d"), 3)
+        self._arena()
+        lo, hi = -self.dial_range, self.dial_range
+        ui.arc(c, cx, cy, r, lo, hi, shade(ui.LINE), width=4)
         for tick in range(-int(self.dial_range), int(self.dial_range) + 1, 15):
-            a, b = needle_end(cx, cy, r - 8, tick), needle_end(cx, cy, r + 4, tick)
-            c.create_line(*a, *b, fill=shade("#6e7681"), width=2, tags="body")
+            a, b = needle_end(cx, cy, r - 12, tick), needle_end(cx, cy, r - 5, tick)
+            ui.line(c, *a, *b, shade(ui.FAINT), width=2)
         d = self.dial
-        arc(r, d.target - d.tolerance, d.target + d.tolerance, shade("#7d6a14"), 12)
-        tip = needle_end(cx, cy, r + 2, d.target)
-        base = needle_end(cx, cy, r - 24, d.target)
-        c.create_line(*base, *tip, fill=shade(TARGET), width=4, tags="body")
-        end = needle_end(cx, cy, r - 12, self._angle())
-        c.create_line(cx, cy, *end, fill=shade(NEEDLE), width=5, tags="body")
-        c.create_oval(cx - 6, cy - 6, cx + 6, cy + 6, fill=shade(NEEDLE), outline="", tags="body")
+        band_lo, band_hi = max(lo, d.target - d.tolerance), min(hi, d.target + d.tolerance)
+        ui.arc(c, cx, cy, r, band_lo, band_hi, shade(TARGET), width=10,
+               glow=0 if dim else 10)
+        tip = needle_end(cx, cy, r + 8, d.target)
+        base = needle_end(cx, cy, r - 22, d.target)
+        ui.line(c, *base, *tip, shade(TARGET), width=3)
+        end = needle_end(cx, cy, r - 20, self._angle())
+        needle = NEEDLE if d.on_target else FG
+        ui.line(c, cx, cy, *end, shade(needle), width=4)
+        ui.orb(c, cx, cy, 9, shade(needle), glow=0 if dim else 8)
 
-        hud = (f"Done {d.completed}    Timed out {d.timeouts}    "
-               f"Band +-{d.tolerance:.0f} deg    Target {d.target:+.0f}    Dial {self._angle():+.0f}")
-        c.create_text(x0 + 8, y0 + 6, anchor="nw", fill=DIM, font=("Segoe UI", 11),
-                      text=hud, tags="body")
+        self._hud([("Done", d.completed), ("Timed out", d.timeouts),
+                   ("Band", f"\u00b1{d.tolerance:.0f}\u00b0"), ("Target", f"{d.target:+.0f}\u00b0"),
+                   ("Dial", f"{self._angle():+.0f}\u00b0")])
         if d.on_target and not dim:
-            c.create_text(cx, y0 + 50, text="Hold...", fill=TARGET,
-                          font=("Segoe UI", 16, "bold"), tags="body")
+            c.create_text(cx, y0 + 34, text="Hold\u2026", fill=TARGET, font=ui.font(14, True),
+                          tags="body")
             frac = min(1.0, d.held / d.hold_s)
-            c.create_rectangle(cx - 80, y0 + 70, cx - 80 + 160 * frac, y0 + 78,
-                               fill=TARGET, outline="", tags="body")
-        if self.screen.key == "paused":
-            c.create_text(cx, (y0 + y1) / 2, text="PAUSED", fill=FG,
-                          font=("Segoe UI", 34, "bold"), tags="body")
+            ui.pill(c, cx - 80, y0 + 52, cx + 80, y0 + 60, ui.LINE)
+            fill_w = int(160 * frac / 8) * 8
+            if fill_w >= 8:
+                ui.pill(c, cx - 80, y0 + 52, cx - 80 + fill_w, y0 + 60, TARGET)
+        self._paused_overlay()
 
     def _summary_lines(self) -> list:
         mean = sum(self.times) / len(self.times) if self.times else None

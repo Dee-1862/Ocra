@@ -57,6 +57,11 @@ class OgLink:
     def _put(self, kind, value) -> None:
         self.events.put((kind, value, self.role))
 
+    @property
+    def connected(self) -> bool:
+        """True while the serial port is open and commands can be sent."""
+        return self._ser is not None
+
     def start(self) -> None:
         threading.Thread(target=self._run, daemon=True).start()
 

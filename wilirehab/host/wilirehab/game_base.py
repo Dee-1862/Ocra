@@ -27,7 +27,7 @@ from collections import deque
 from pathlib import Path
 from statistics import median
 
-from . import cli
+from . import cli, ui
 from .align import LagFusion
 from .bilateral import HandStats, format_row, symmetry_report
 from .button_map import SCREENS, SCREENS_BY_KEY
@@ -36,6 +36,7 @@ from .data_panel import DataPanel
 from .datatable import DataTable
 from .discomfort_panel import DiscomfortPanel
 from .motion_discomfort import HandMonitor
+from .og_screen import OgScreenWriter, buttons_live, compose, face_line, hand_line
 from .mapping_demo import App, BG, DIM, FG, PANEL, W, blend
 from .measures import describe_trend, tremor_band, trend_per_minute
 from .og_link import OgLink
@@ -82,6 +83,12 @@ class TeeLog:
 
 class GameApp(App):
     TITLE = "WiliRehab game"
+    # Shown on the OG's own screen (at most 17 characters).
+    OG_NAME = "WILIREHAB"
+    # True for a game that is played with the OG buttons (Colour Reflex). Every
+    # other game ignores OG button presses while playing or paused, and takes
+    # them again at the end of the game (see og_screen.buttons_live).
+    USES_BUTTONS = False
     # What the summary's fatigue line tracks, or None for no trend line:
     # (label, unit, multiply values by, "steady" below this per minute, higher is better).
     PERF = ("Success rate", "%", 100.0, 2.0, True)
@@ -114,6 +121,10 @@ class GameApp(App):
         self.pitch_angles: dict = {}
         self._null_tracker = TiltTracker(axis=axis)
         self.hand_monitors = {r: HandMonitor() for r in self.roles}
+        self._last_hand: dict = {}
+        self._last_face = None
+        self._og_writers: dict = {}
+        self._og_error_shown = False
         self.fusion = LagFusion()
         self._face_q: queue.Queue = queue.Queue()
         self._face_stop = threading.Event()
@@ -152,6 +163,7 @@ class GameApp(App):
         if face_on:
             self._start_face(cli.FACE["camera"], cli.FACE["rest_s"])
         root.after(100, self._poll_face)
+        root.after(300, self._tick_og_screen)
         for role, port in ports.items():
             link = OgLink(port, self.events, role=role,
                           on_connect=("STREAM 50",) if self._stream else ())
@@ -215,13 +227,45 @@ class GameApp(App):
                 at = self.data.from_clock(value.pop("mono"))
                 self.data.add("face", "reading", at=at, **value)
                 self.fusion.add_face(at, value)
+                self._last_face = value
         except queue.Empty:
             pass
         for event in self.fusion.poll(self.data.now()):
             self.data.add("fusion", "event", **event)
         self.root.after(100, self._poll_face)
 
+    # ---- the OG's own screen ---------------------------------------------
+
+    def _og_lines(self) -> list:
+        """Up to three short lines of game data for the OG screen. Games override this."""
+        return []
+
+    def _tick_og_screen(self) -> None:
+        """Keep each connected OG showing the game name and live data."""
+        try:
+            summary = self._summary_lines() if self.screen.key == "summary" else ()
+            for role, link in self.links.items():
+                if not link.connected:
+                    continue
+                writer = self._og_writers.get(role)
+                if writer is None:
+                    writer = self._og_writers[role] = OgScreenWriter(link.send)
+                rows, bar = compose(
+                    name=self.OG_NAME, screen_key=self.screen.key,
+                    screen_title=self.screen.title, uses_buttons=self.USES_BUTTONS,
+                    game_lines=self._og_lines(), hand=hand_line(self._last_hand.get(role)),
+                    face=face_line(self._last_face), pain=self.pain,
+                    summary_lines=summary)
+                writer.show(rows, bar)
+        except Exception as exc:        # shown in the window, once, not swallowed
+            if not self._og_error_shown:
+                self._og_error_shown = True
+                self.status.configure(text=f"OG screen could not update: {exc}")
+        self.root.after(250, self._tick_og_screen)
+
     def _close(self) -> None:
+        for writer in self._og_writers.values():
+            writer.idle()
         self._face_stop.set()
         if self._face_thread is not None:
             self._face_thread.join(timeout=2.0)
@@ -234,6 +278,15 @@ class GameApp(App):
     def press(self, button: str, source: str) -> None:
         # source is "click", "key", or "OG:<role>" for a real button.
         role = source.split(":", 1)[1] if source.startswith("OG:") else None
+        if role and not buttons_live(self.USES_BUTTONS, self.screen.key):
+            # The OG's buttons are off during this game. The press is kept in the
+            # data table so it is not lost, but nothing happens. The keyboard and
+            # the on-screen buttons (the therapist) still work.
+            self.data.add("og", "button", role=role, color=button, action="ignored",
+                          screen=self.screen.key)
+            self.status.configure(text="OG buttons are off while this game plays; "
+                                       "they work again at the end of the game")
+            return
         self._press_role = role          # games read this in _apply to know which hand
         if role:
             self._down_at[(role, button)] = time.monotonic()
@@ -307,6 +360,7 @@ class GameApp(App):
             if hand_row is not None:
                 row = self.data.add("hand", "motion", role=role, **hand_row)
                 self.fusion.add_hand(row["t"], hand_row)
+                self._last_hand[role] = hand_row
         self._check_tremor(role, t_ms)
         self.data.add("og", "tilt", role=role, roll_deg=round(slow, 1),
                       pitch_deg=round(pitch, 1), steady=slow_tracker.steady)
@@ -465,8 +519,32 @@ class GameApp(App):
 
     def _draw_field(self, dim: bool) -> None:
         """Draw the play area. Games override this."""
+        self._arena()
+
+    def _arena(self) -> None:
+        """The rounded, softly lit panel every game plays on."""
         x0, y0, x1, y1 = FIELD
-        self.canvas.create_rectangle(x0, y0, x1, y1, outline="#30363d", tags="body")
+        ui.rrect(self.canvas, x0, y0, x1, y1, r=18, top="#151d27", bottom="#0c1219",
+                 border=ui.LINE, shadow=12, dots=True, tags="body")
+
+    def _hud(self, items) -> None:
+        """Stat pills on the title row, right-aligned: [(label, value[, colour])]."""
+        ui.chips(self.canvas, W - 24, 24, items, tags="body", align="right")
+
+    def _paused_overlay(self) -> None:
+        """Veil the arena and say so. Called last by each game's _draw_field."""
+        if self.screen.key != "paused":
+            return
+        x0, y0, x1, y1 = FIELD
+        ui.rrect(self.canvas, x0, y0, x1, y1, r=18, top=ui.BG, bottom=ui.BG, border=None,
+                 alpha=0.62, tags="body")
+        cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+        ui.rrect(self.canvas, cx - 92, cy - 34, cx + 92, cy + 34, r=18, top=ui.RAISED,
+                 bottom=ui.SURFACE, border=ui.LINE, shadow=10, tags="body")
+        self.canvas.create_text(cx, cy - 8, text="Paused", fill=FG, font=ui.font(20, True),
+                                tags="body")
+        self.canvas.create_text(cx, cy + 16, text="green resumes", fill=DIM, font=ui.font(10),
+                                tags="body")
 
     def _summary_lines(self) -> list:
         """The game's own summary lines (up to five). Games override this."""
@@ -492,20 +570,36 @@ class GameApp(App):
         return lines
 
     def _draw_summary(self) -> None:
+        c = self.canvas
         lines = self._summary_lines() + self._extra_lines()
-        for i, text in enumerate(lines):
-            self.canvas.create_text(W / 2, 108 + 18 * i, text=text, fill=FG,
-                                    font=("Segoe UI", 13), tags="body")
         report = symmetry_report(self.stats)
+        row_h = 27
+        height = 24 + row_h * len(lines)
+        left, right = (24, 340) if report else (110, W - 110)
+        ui.rrect(c, left, 98, right, 98 + height, r=20, top=ui.SURFACE_TOP, bottom=ui.SURFACE,
+                 border=ui.LINE, shadow=12, tags="body")
+        for i, text in enumerate(lines):
+            label, _, value = text.partition("  ")
+            y = 98 + 12 + row_h * i + row_h / 2
+            if i:
+                c.create_line(left + 18, y - row_h / 2, right - 18, y - row_h / 2,
+                              fill=ui.LINE, tags="body")
+            c.create_text(left + 20, y, text=label, anchor="w", fill=DIM, font=ui.font(11),
+                          tags="body")
+            c.create_text(right - 20, y, text=value.strip(), anchor="e", fill=FG,
+                          font=ui.font(12, True), tags="body")
         if not report:
             return
-        y = 108 + 18 * len(lines) + 6
+        ui.rrect(c, 352, 98, W - 24, 98 + height, r=20, top=ui.SURFACE_TOP, bottom=ui.SURFACE,
+                 border=ui.LINE, shadow=12, tags="body")
+        c.create_text(372, 98 + 24, text="Left vs right", anchor="w", fill=ui.ACCENT,
+                      font=ui.font(10, True), tags="body")
         head = f"{'':<11}{'L':>6}{'R':>6}{'ratio':>6}"
-        self.canvas.create_text(W / 2, y, text=head, fill=DIM,
-                                font=("Consolas", 11), tags="body")
+        c.create_text(372, 98 + 50, text=head, anchor="w", fill=DIM, font=ui.mono(10),
+                      tags="body")
         for i, row in enumerate(report):
-            self.canvas.create_text(W / 2, y + 17 * (i + 1), text=format_row(row),
-                                    fill=FG, font=("Consolas", 11), tags="body")
+            c.create_text(372, 98 + 72 + 20 * i, text=format_row(row), anchor="w", fill=FG,
+                          font=ui.mono(10), tags="body")
 
 
 def _round(v):

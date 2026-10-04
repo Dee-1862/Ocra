@@ -7,10 +7,8 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
-BG = "#0d1117"
-PANEL = "#161b22"
-FG = "#e6edf3"
-DIM = "#6e7681"
+from . import ui
+from .ui import BG, DIM, FG, PANEL
 
 REFRESH_MS = 200
 STALE_S = 2.0           # a live value older than this is greyed out
@@ -36,47 +34,41 @@ class DataPanel(tk.Frame):
         self.freeze = tk.BooleanVar(value=False)
         self._style()
 
-        tk.Label(self, text="Live sensors", bg=BG, fg=FG,
-                 font=("Segoe UI", 12, "bold")).pack(anchor="w")
-        self.live = ttk.Treeview(self, style="Data.Treeview", show="headings",
-                                 columns=("hand", "source", "channel", "value", "age"), height=10)
+        tk.Label(self, text="LIVE SENSORS", bg=BG, fg=ui.FAINT,
+                 font=ui.font(8, True)).pack(anchor="w", padx=2)
+        box = ui.framed(self)
+        box.pack(fill="x", pady=(4, 14))
+        self.live = ttk.Treeview(box, style="Data.Treeview", show="headings",
+                                 columns=("hand", "source", "channel", "value", "age"), height=8)
         for name, width in (("hand", 36), ("source", 50), ("channel", 84), ("value", 190), ("age", 44)):
             self.live.heading(name, text=name)
             self.live.column(name, width=width, anchor="w", stretch=False)
-        self.live.tag_configure("stale", foreground=DIM)
-        self.live.pack(fill="x", pady=(4, 10))
+        self.live.tag_configure("stale", foreground=ui.FAINT)
+        self.live.pack(fill="x")
 
         head = tk.Frame(self, bg=BG)
         head.pack(fill="x")
-        tk.Label(head, text="Timeline", bg=BG, fg=FG,
-                 font=("Segoe UI", 12, "bold")).pack(side="left")
+        tk.Label(head, text="TIMELINE", bg=BG, fg=ui.FAINT,
+                 font=ui.font(8, True)).pack(side="left", padx=2)
         tk.Checkbutton(head, text="freeze", variable=self.freeze, bg=BG, fg=DIM,
                        selectcolor=PANEL, activebackground=BG, activeforeground=FG,
-                       highlightthickness=0, takefocus=0).pack(side="right")
-        self.timeline = ttk.Treeview(self, style="Data.Treeview", show="headings",
-                                     columns=("t", "hand", "source", "channel", "value"), height=15)
+                       highlightthickness=0, takefocus=0, font=ui.font(9)).pack(side="right")
+        box2 = ui.framed(self)
+        box2.pack(fill="both", expand=True, pady=(4, 0))
+        self.timeline = ttk.Treeview(box2, style="Data.Treeview", show="headings",
+                                     columns=("t", "hand", "source", "channel", "value"), height=14)
         for name, width, label in (("t", 50, "time s"), ("hand", 36, "hand"),
                                    ("source", 50, "source"), ("channel", 80, "channel"),
                                    ("value", 190, "value")):
             self.timeline.heading(name, text=label)
             self.timeline.column(name, width=width, anchor="w", stretch=False)
-        self.timeline.pack(fill="both", expand=True, pady=(4, 0))
+        self.timeline.pack(fill="both", expand=True)
 
         self.after(REFRESH_MS, self._refresh)
 
     @staticmethod
     def _style() -> None:
-        style = ttk.Style()
-        try:
-            style.theme_use("clam")      # the native Windows theme ignores colours
-        except tk.TclError:
-            pass
-        style.configure("Data.Treeview", background=PANEL, fieldbackground=PANEL,
-                        foreground=FG, borderwidth=0, rowheight=20,
-                        font=("Consolas", 9))
-        style.configure("Data.Treeview.Heading", background="#21262d", foreground=FG,
-                        relief="flat", font=("Segoe UI", 9, "bold"))
-        style.map("Data.Treeview", background=[("selected", "#30363d")])
+        ui.style_tables()
 
     def _refresh(self) -> None:
         now = self.table.now()

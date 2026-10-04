@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import tkinter as tk
 
+from . import ui
 from .autorange import AutoRange
 from .breakout import MIN_SPEED, Breakout
 from .game_base import FIELD, TILT_SLEW, GameApp, build_game_args
@@ -33,14 +34,15 @@ from .cli import parse_roles, resolve_ports
 from .mapping_demo import DIM, FG, PANEL, blend
 from .tilt import to_position
 
-ROW_COLORS = ("#ef4444", "#f5c400", "#22c55e")
-BALL = "#e6edf3"
-PADDLE = "#3b82f6"
+ROW_COLORS = ("#f87171", "#fbbf24", "#34d399")
+BALL = "#f1f5f9"
+PADDLE = "#60a5fa"
 MOVEMENT_NAME = {"pitch": "wrist up/down (pitch)", "roll": "forearm rotation (roll)"}
 
 
 class BrickApp(GameApp):
     TITLE = "WiliRehab brick break"
+    OG_NAME = "BRICK BREAK"
     PERF = ("Paddle catch rate", "%", 100.0, 2.0, True)
 
     def __init__(self, root: tk.Tk, ports: dict, log_dir, axis="y", invert_roles=(),
@@ -62,6 +64,11 @@ class BrickApp(GameApp):
         self.game = Breakout(speed=self._start_speed, serve_delay=0.8)
         self.autorange = AutoRange()
         self.paddle_hits = 0
+
+    def _og_lines(self) -> list:
+        g, angle = self.game, self._angle()
+        return [f"Bricks {g.score}", f"Drops {g.drops} Lv {g.levels + 1}",
+                "Tilt --" if angle is None else f"Tilt {angle:+.0f} deg"]
 
     def _end_fields(self) -> dict:
         return {"bricks": self.game.score, "drops": self.game.drops,
@@ -133,26 +140,22 @@ class BrickApp(GameApp):
         def shade(color):
             return blend(color, PANEL, 0.6) if dim else color
 
-        c.create_rectangle(x0, y0, x1, y1, outline="#30363d", tags="body")
+        self._arena()
         for bx0, by0, bx1, by1, row in g.bricks:
-            c.create_rectangle(x0 + bx0, y0 + by0, x0 + bx1, y0 + by1,
-                               fill=shade(ROW_COLORS[row % 3]), outline="", tags="body")
+            ui.brick(c, x0 + bx0, y0 + by0, x0 + bx1, y0 + by1, shade(ROW_COLORS[row % 3]))
         half = g.paddle_w / 2
         py = y0 + g.paddle_y
-        c.create_rectangle(x0 + g.paddle_x - half, py - g.paddle_h / 2,
-                           x0 + g.paddle_x + half, py + g.paddle_h / 2,
-                           fill=shade(PADDLE), outline="", tags="body")
-        r = g.ball_r
-        c.create_oval(x0 + g.ball_x - r, y0 + g.ball_y - r, x0 + g.ball_x + r,
-                      y0 + g.ball_y + r, fill=shade(BALL), outline="", tags="body")
-        c.create_text(x0 + 8, y0 + 4, anchor="nw", fill=DIM, font=("Segoe UI", 10),
-                      text=f"Bricks {g.score}   Drops {g.drops}   Level {g.levels + 1}   "
-                           f"Steer: {MOVEMENT_NAME[self.movement]}"
-                           + ("" if self._fixed_range or not self.autorange.span
-                              else f"   Range {self.autorange.span:.0f} deg"), tags="body")
-        if self.screen.key == "paused":
-            c.create_text((x0 + x1) / 2, (y0 + y1) / 2, text="PAUSED", fill=FG,
-                          font=("Segoe UI", 34, "bold"), tags="body")
+        if not dim:
+            ui.halo(c, x0 + g.paddle_x, py + 2, half * 1.1, PADDLE, alpha=0.30)
+        ui.pill(c, x0 + g.paddle_x - half, py - g.paddle_h / 2 - 1,
+                x0 + g.paddle_x + half, py + g.paddle_h / 2 + 1, shade(PADDLE))
+        ui.orb(c, x0 + g.ball_x, y0 + g.ball_y, g.ball_r + 1, shade(BALL),
+               glow=0 if dim else 9)
+        chips = [("Bricks", g.score), ("Drops", g.drops), ("Level", g.levels + 1)]
+        if not self._fixed_range and self.autorange.span:
+            chips.append(("Range", f"{self.autorange.span:.0f}\u00b0"))
+        self._hud(chips)
+        self._paused_overlay()
 
     def _summary_lines(self) -> list:
         g = self.game

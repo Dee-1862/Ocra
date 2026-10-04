@@ -30,6 +30,7 @@ import random
 import time
 import tkinter as tk
 
+from . import ui
 from .bilateral import LEFT, RIGHT
 from .game_base import FIELD, GameApp, build_game_args
 from .cli import parse_roles, resolve_ports
@@ -42,13 +43,14 @@ WINDOW = 0.35         # seconds either side of the beat that count
 START_BPM, MIN_BPM, MAX_BPM = 50, 30, 90
 
 ARROWS = {"left": "←", "right": "→", "up": "↑", "down": "↓"}
-DIR_COLORS = {"left": "#f5c400", "right": "#3b82f6", "up": "#22c55e", "down": "#ef4444"}
+DIR_COLORS = {"left": "#fbbf24", "right": "#60a5fa", "up": "#34d399", "down": "#f87171"}
 LANE_X = {LEFT: 0.27, RIGHT: 0.73, None: 0.5}     # fraction of the field width
 BADGE = {LEFT: "L", RIGHT: "R"}
 
 
 class RhythmApp(GameApp):
     TITLE = "WiliRehab rhythm flick"
+    OG_NAME = "RHYTHM FLICK"
 
     def __init__(self, root: tk.Tk, ports: dict, log_dir, axis="y", invert_roles=(),
                  invert_fwd_roles=(), dirs="all", bpm=START_BPM, flick_dps=150.0,
@@ -177,6 +179,9 @@ class RhythmApp(GameApp):
                 self._say("MISS", "#ef4444")
                 self.session.record("miss", role=b.get("hand"), n=self.misses, want=b["dir"])
 
+    def _og_lines(self) -> list:
+        return [f"Hits {self.hits}", f"Misses {self.misses}", f"Tempo {self.bpm} BPM"]
+
     # ---- drawing -------------------------------------------------------
 
     def _draw_field(self, dim: bool) -> None:
@@ -184,15 +189,21 @@ class RhythmApp(GameApp):
         x0, y0, x1, y1 = FIELD
         width = x1 - x0
         line_y = y1 - 34
-        top = y0 + 24
-        c.create_rectangle(x0, y0, x1, y1, outline="#30363d", tags="body")
-        c.create_line(x0 + 30, line_y, x1 - 30, line_y, fill=DIM, width=3, tags="body")
-        if self.hand_roles != (None,):
-            for hand in (LEFT, RIGHT):
-                lx = x0 + LANE_X[hand] * width
-                c.create_line(lx, y0 + 20, lx, line_y, fill="#21262d", tags="body")
-                c.create_text(lx, line_y + 14, text={LEFT: "LEFT", RIGHT: "RIGHT"}[hand],
-                              fill=DIM, font=("Segoe UI", 10, "bold"), tags="body")
+        top = y0 + 30
+        self._arena()
+        if ui.GLOW:
+            ui.rrect(c, x0 + 24, line_y - 9, x1 - 24, line_y + 9, r=9, top=ui.ACCENT,
+                     bottom=ui.ACCENT, border=None, alpha=0.14)
+        ui.rrect(c, x0 + 30, line_y - 1, x1 - 30, line_y + 2, r=1, top=ui.ACCENT, bottom=ui.ACCENT,
+                 border=None, alpha=0.9)
+        lanes = (LEFT, RIGHT) if self.hand_roles != (None,) else (None,)
+        for hand in lanes:
+            lx = x0 + LANE_X[hand] * width
+            c.create_line(lx, y0 + 22, lx, line_y - 30, fill=ui.LINE, dash=(2, 5), tags="body")
+            ui.ring(c, lx, line_y, 30, ui.FAINT, thick=2)
+            if hand:
+                c.create_text(lx, line_y + 22, text={LEFT: "LEFT", RIGHT: "RIGHT"}[hand],
+                              fill=ui.FAINT, font=ui.font(9, True), tags="body")
         for b in self.blocks:
             progress = 1.0 - (b["t_hit"] - self.play_seconds) / LEAD
             y = top + progress * (line_y - top)
@@ -200,24 +211,20 @@ class RhythmApp(GameApp):
             color = DIR_COLORS[b["dir"]]
             if dim:
                 color = blend(color, PANEL, 0.6)
-            c.create_rectangle(cx - 26, y - 26, cx + 26, y + 26, fill=color,
-                               outline="", tags="body")
-            c.create_text(cx, y, text=ARROWS[b["dir"]], fill="#0d1117",
-                          font=("Segoe UI", 26, "bold"), tags="body")
+            ui.rrect(c, cx - 25, y - 25, cx + 25, y + 25, r=13, top=ui.lighten(color, 0.08),
+                     bottom=ui.darken(color, 0.06), border=None)
+            c.create_text(cx, y - 1, text=ARROWS[b["dir"]], fill=ui.BG, font=ui.font(24, True),
+                          tags="body")
             badge = BADGE.get(b.get("hand"))
             if badge:
-                c.create_text(cx - 20, y - 20, text=badge, fill="#0d1117",
-                              font=("Segoe UI", 10, "bold"), tags="body")
-        c.create_text(x0 + 8, y0 + 6, anchor="nw", fill=DIM, font=("Segoe UI", 11),
-                      text=f"Hits {self.hits}    Misses {self.misses}    "
-                           f"Tempo {self.bpm} BPM", tags="body")
+                c.create_text(cx - 17, y - 17, text=badge, fill=ui.BG, font=ui.font(8, True),
+                              tags="body")
+        self._hud([("Hits", self.hits), ("Misses", self.misses), ("Tempo", f"{self.bpm} BPM")])
         text, until, color = self.flash
         if text and time.monotonic() < until and not dim:
-            c.create_text((x0 + x1) / 2, y0 + 40, text=text, fill=color,
-                          font=("Segoe UI", 20, "bold"), tags="body")
-        if self.screen.key == "paused":
-            c.create_text((x0 + x1) / 2, (y0 + y1) / 2, text="PAUSED", fill=FG,
-                          font=("Segoe UI", 34, "bold"), tags="body")
+            c.create_text((x0 + x1) / 2, y0 + 22, text=text, fill=color, font=ui.font(16, True),
+                          tags="body")
+        self._paused_overlay()
 
     def _summary_lines(self) -> list:
         total = self.hits + self.misses

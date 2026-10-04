@@ -26,6 +26,7 @@ import time
 import tkinter as tk
 from statistics import median
 
+from . import ui
 from .bilateral import LEFT, RIGHT
 from .button_map import BUTTONS, COLORS, REFLEX_PLAY
 from .game_base import FIELD, GameApp, build_game_args
@@ -40,6 +41,8 @@ LABELS = {"Gray": "gray", "Yellow": "yellow", "Green": "green", "Blue": "blue", 
 
 class ReflexApp(GameApp):
     TITLE = "WiliRehab colour reflex"
+    OG_NAME = "COLOUR REFLEX"
+    USES_BUTTONS = True           # the five OG buttons are the answers, so they always count
     PERF = ("Reaction time", "ms", 1.0, 10.0, False)        # lower is better
 
     def __init__(self, root: tk.Tk, ports: dict, log_dir, axis="y", invert_roles=(),
@@ -150,41 +153,42 @@ class ReflexApp(GameApp):
             self.session.record("too_slow", color=self.target)
             self._next_prompt()
 
+    def _og_lines(self) -> list:
+        s = self.rt.summary()
+        return [f"Correct {self.correct}", f"Wrong {self.wrong} Slow {self.slow_count}",
+                "Median --" if s is None else f"Median {int(s['median'])} ms"]
+
     # ---- drawing ---------------------------------------------------------
 
     def _draw_field(self, dim: bool) -> None:
         c = self.canvas
         x0, y0, x1, y1 = FIELD
-        cy = (y0 + y1) / 2 + 6
-        radius = 32
-        c.create_rectangle(x0, y0, x1, y1, outline="#30363d", tags="body")
+        cy = (y0 + y1) / 2 + 12
+        radius = 30
+        self._arena()
         for i, color in enumerate(BUTTONS):
             cx = x0 + (x1 - x0) * (2 * i + 1) / (2 * len(BUTTONS))
             lit = self.phase == "show" and color == self.target and not dim
             base = COLORS[color]
-            fill = base if lit else blend(base, PANEL, 0.78)
             if lit:
-                c.create_oval(cx - radius - 9, cy - radius - 9, cx + radius + 9,
-                              cy + radius + 9, outline=base, width=4, tags="body")
-            c.create_oval(cx - radius, cy - radius, cx + radius, cy + radius,
-                          fill=fill, outline="", tags="body")
+                ui.orb(c, cx, cy, radius, base, glow=22)
+            else:
+                ui.orb(c, cx, cy, radius, blend(base, ui.SURFACE, 0.80))
+                ui.ring(c, cx, cy, radius, blend(base, ui.SURFACE, 0.55), thick=2)
+            c.create_text(cx, cy + radius + 18, text=color, fill=ui.FG if lit else ui.FAINT,
+                          font=ui.font(9, lit), tags="body")
         s = self.rt.summary()
         median_text = "-" if s is None else f"{int(s['median'])} ms"
-        c.create_text(x0 + 8, y0 + 4, anchor="nw", fill=DIM, font=("Segoe UI", 10),
-                      text=f"Correct {self.correct}   Wrong {self.wrong}   "
-                           f"Slow {self.slow_count}   Median {median_text}   "
-                           f"Time allowed {self.window:.1f} s   (p = pause, e = end)",
-                      tags="body")
+        self._hud([("Correct", self.correct), ("Wrong", self.wrong), ("Slow", self.slow_count),
+                   ("Median", median_text), ("Allowed", f"{self.window:.1f} s")])
         text, until, color = self.flash
         if text and time.monotonic() < until and not dim:
-            c.create_text((x0 + x1) / 2, y0 + 38, text=text, fill=color,
-                          font=("Segoe UI", 22, "bold"), tags="body")
+            c.create_text((x0 + x1) / 2, y0 + 30, text=text, fill=color, font=ui.font(18, True),
+                          tags="body")
         elif self.phase == "wait" and not dim:
-            c.create_text((x0 + x1) / 2, y0 + 38, text="Get ready...", fill=DIM,
-                          font=("Segoe UI", 16), tags="body")
-        if self.screen.key == "paused":
-            c.create_text((x0 + x1) / 2, (y0 + y1) / 2, text="PAUSED", fill=FG,
-                          font=("Segoe UI", 34, "bold"), tags="body")
+            c.create_text((x0 + x1) / 2, y0 + 30, text="Get ready\u2026", fill=ui.DIM,
+                          font=ui.font(14), tags="body")
+        self._paused_overlay()
 
     def _summary_lines(self) -> list:
         s = self.rt.summary()

@@ -23,19 +23,21 @@ from __future__ import annotations
 import math
 import tkinter as tk
 
+from . import ui
 from .game_base import FIELD, GameApp, build_game_args
 from .cli import parse_roles, resolve_ports
 from .hold2d import HoldRound2D
 from .mapping_demo import DIM, FG, PANEL, blend
 
-CURSOR = "#e6edf3"
-INSIDE = "#22c55e"
-RING = "#f5c400"
+CURSOR = "#f1f5f9"
+INSIDE = "#34d399"
+RING = "#fbbf24"
 NUDGE_DEG = 3.0
 
 
 class SteadyApp(GameApp):
     TITLE = "WiliRehab steady hand"
+    OG_NAME = "STEADY HAND"
     PERF = ("Steadiness", "deg", 1.0, 0.2, False)       # distance from target, lower is better
 
     def __init__(self, root: tk.Tk, ports: dict, log_dir, axis="y", invert_roles=(),
@@ -106,6 +108,11 @@ class SteadyApp(GameApp):
         if event:
             self._target_sum, self._target_n = 0.0, 0
 
+    def _og_lines(self) -> list:
+        roll, pitch = self._cursor()
+        return [f"Held {self.hold.completed}", f"Missed {self.hold.timeouts}",
+                f"R{roll:+.0f} P{pitch:+.0f} deg"]
+
     # ---- drawing -------------------------------------------------------
 
     def _draw_field(self, dim: bool) -> None:
@@ -118,33 +125,29 @@ class SteadyApp(GameApp):
         def shade(color):
             return blend(color, PANEL, 0.6) if dim else color
 
-        c.create_rectangle(x0, y0, x1, y1, outline="#30363d", tags="body")
-        c.create_line(cx, y0 + 18, cx, y1 - 6, fill="#21262d", tags="body")
-        c.create_line(x0 + 6, cy, x1 - 6, cy, fill="#21262d", tags="body")
+        self._arena()
+        c.create_line(cx, y0 + 16, cx, y1 - 14, fill=ui.LINE, tags="body")
+        c.create_line(x0 + 16, cy, x1 - 16, cy, fill=ui.LINE, tags="body")
         tx, ty = cx + h.target[0] * scale, cy - h.target[1] * scale
         r = h.tolerance * scale
-        c.create_oval(tx - r, ty - r, tx + r, ty + r, outline=shade(RING), width=4,
-                      tags="body")
+        ring_color = INSIDE if h.on_target and not dim else RING
+        ui.ring(c, tx, ty, r, shade(ring_color), thick=4, glow=0 if dim else 12,
+                fill_alpha=0.0 if dim else 0.10)
         roll, pitch = self._cursor()
-        px = max(x0 + 8, min(x1 - 8, cx + roll * scale))
-        py = max(y0 + 22, min(y1 - 8, cy - pitch * scale))
+        px = max(x0 + 14, min(x1 - 14, cx + roll * scale))
+        py = max(y0 + 14, min(y1 - 14, cy - pitch * scale))
         color = INSIDE if h.on_target else CURSOR
-        c.create_oval(px - 8, py - 8, px + 8, py + 8, fill=shade(color), outline="",
-                      tags="body")
-        steadiness = h.mean_distance
-        tremor = self.tremor_rms.get(self.driver)
-        c.create_text(x0 + 8, y0 + 4, anchor="nw", fill=DIM, font=("Segoe UI", 10),
-                      text=f"Held {h.completed}   Timed out {h.timeouts}   "
-                           f"Ring +-{h.tolerance:.0f} deg   Roll {roll:+.0f}  Pitch {pitch:+.0f}"
-                           + (f"   Tremor {tremor[-1]:.1f} mg" if tremor else ""),
-                      tags="body")
+        ui.orb(c, px, py, 9, shade(color), glow=0 if dim else 8)
         if h.on_target and not dim:
             frac = min(1.0, h.held / h.hold_s)
-            c.create_rectangle(cx - 70, y1 - 14, cx - 70 + 140 * frac, y1 - 8,
-                               fill=shade(INSIDE), outline="", tags="body")
-        if self.screen.key == "paused":
-            c.create_text(cx, (y0 + y1) / 2, text="PAUSED", fill=FG,
-                          font=("Segoe UI", 34, "bold"), tags="body")
+            ui.pill(c, cx - 70, y1 - 22, cx + 70, y1 - 14, ui.LINE)
+            fill_w = int(140 * frac / 7) * 7
+            if fill_w >= 8:
+                ui.pill(c, cx - 70, y1 - 22, cx - 70 + fill_w, y1 - 14, shade(INSIDE))
+        self._hud([("Held", h.completed), ("Missed", h.timeouts),
+                   ("Ring", f"\u00b1{h.tolerance:.0f}\u00b0"),
+                   ("Tilt", f"{roll:+.0f}\u00b0 / {pitch:+.0f}\u00b0")])
+        self._paused_overlay()
 
     def _summary_lines(self) -> list:
         mean = self.hold.mean_distance
