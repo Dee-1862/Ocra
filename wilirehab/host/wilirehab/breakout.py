@@ -14,7 +14,8 @@ MIN_SPEED, MAX_SPEED = 90.0, 320.0
 
 class Breakout:
     def __init__(self, width: float = 592.0, height: float = 178.0, cols: int = 10,
-                 rows: int = 3, speed: float = 170.0, paddle_w: float = 84.0, rng=None):
+                 rows: int = 3, speed: float = 170.0, paddle_w: float = 84.0, rng=None,
+                 serve_delay: float = 0.0):
         self.width, self.height = width, height
         self.cols, self.rows = cols, rows
         self.speed = speed
@@ -23,6 +24,8 @@ class Breakout:
         self.paddle_y = height - 14.0           # centre line of the paddle
         self.paddle_x = width / 2
         self.ball_r = 5.0
+        self.serve_delay = serve_delay      # seconds the ball rides the paddle before each serve
+        self.serve_left = 0.0
         self.score = 0
         self.drops = 0
         self.levels = 0
@@ -42,12 +45,14 @@ class Breakout:
                 self.bricks.append([x0, y0, x0 + bw, y0 + bh, r])   # last item: its row
 
     def relaunch(self, angle_deg=None) -> None:
-        """Put the ball on the paddle and send it up, a little off vertical."""
+        """Put the ball on the paddle and send it up, a little off vertical. With a serve
+        delay the ball first rides the paddle for that long, so the player can get ready."""
         a = math.radians(self._rng.uniform(-30, 30) if angle_deg is None else angle_deg)
         self.ball_x = self.paddle_x
         self.ball_y = self.paddle_y - self.paddle_h / 2 - self.ball_r - 1
         self.vx = self.speed * math.sin(a)
         self.vy = -self.speed * math.cos(a)
+        self.serve_left = self.serve_delay
 
     def step(self, dt: float, paddle_x: float) -> list:
         """Advance by dt seconds. Returns events: "wall", "paddle", "brick",
@@ -55,6 +60,11 @@ class Breakout:
         half = self.paddle_w / 2
         self.paddle_x = max(half, min(self.width - half, paddle_x))
         events: list = []
+        if self.serve_left > 0.0:                  # waiting to serve: the ball rides the paddle
+            self.serve_left = max(0.0, self.serve_left - dt)
+            self.ball_x = self.paddle_x
+            self.ball_y = self.paddle_y - self.paddle_h / 2 - self.ball_r - 1
+            return events
         # Small sub-steps so a fast ball cannot pass through a brick or the paddle.
         n = max(1, int(math.ceil(self.speed * dt / self.ball_r)))
         for _ in range(n):

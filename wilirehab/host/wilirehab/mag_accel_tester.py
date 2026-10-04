@@ -19,18 +19,29 @@ whether each action looked the way it should.
 
 shows the expected table from simulated data, with no hardware at all.
 Add --csv-out file.csv to keep every paired reading.
+
+    python -m wilirehab.mag_accel_tester --calibrate --mag-port COM4
+    python -m wilirehab.mag_accel_tester --watch --og-port COM5 --mag-port COM4
+
+--calibrate finds the magnetometer's fixed offset (turn the board through every
+orientation for 25 s) and saves it. --watch then says once a second whether the board
+is sliding up/down, sliding sideways, turning/tilting, or still, using both sensors.
 """
 from __future__ import annotations
 
 import argparse
 import csv
+import json
 import queue
 import sys
 import time
+from pathlib import Path
 
 from .mag_accel import (ACCEL_CHANGE_MG, MAG_CHANGE_UT, PHASES, classify, norm, raw_to_ut,
                         simulate_phase, summarize, vector_change_rms)
 from .mag_link import MagLink
+from .motion_split import (TURN_DEG, describe_motion, estimate_tilt_mg, fit_sphere_offset,
+                           mag_turn_deg, split_accel_motion)
 from .og_link import OgLink
 from .tilt import raw_to_mg
 
@@ -175,19 +186,95 @@ def run_live(args) -> bool:
     return print_table(results)
 
 
-def run_watch(args) -> bool:
-    """Two live meters, one line a second, for testing each sensor on its own.
+OFFSET_FILE = "mag_offset.json"
 
-    The accelerometer and the magnetometer are judged separately, so they do not have
-    to be fixed together: move one and keep the other still, then swap.
-    """
+
+def load_offset(path=OFFSET_FILE):
+    """The saved magnetometer offset as (x, y, z) in uT, or None if there is none."""
+    p = Path(path)
+    if not p.exists():
+        return None
+    try:
+        o = json.loads(p.read_text(encoding="utf-8"))["offset"]
+        return (float(o[0]), float(o[1]), float(o[2]))
+    except (ValueError, KeyError, TypeError, IndexError):
+        return None
+
+
+def pick_mag_port(args):
+    from serial.tools import list_ports
+    from .devices import find_og_mains
+    if args.mag_port:
+        return args.mag_port
+    mains = find_og_mains(list_ports.comports())
+    if len(mains) == 1:
+        return mains[0][0]
+    sys.exit(f"Found {len(mains)} OG main CPUs: pass --mag-port COMx.")
+
+
+def run_calibrate(args) -> bool:
+    """Turn the board through every orientation; the centre of the readings is the offset."""
+    mag_port = pick_mag_port(args)
+    events: queue.Queue = queue.Queue()
+    MagLink(mag_port, events, role="mag").start()
+    print(f"Magnetometer on {mag_port}.")
+    print("Keep it away from the laptop, metal and magnets. When it says GO, turn the board")
+    print("slowly through EVERY orientation for 25 seconds: flip it over, spin it, point each")
+    print("edge up and down. Aim to cover all directions, not just a few.")
+    input("Press Enter to start: ")
+    print("GO")
+    readings = []
+    end = time.monotonic() + 25.0
+    next_note = time.monotonic() + 5.0
+    while time.monotonic() < end:
+        try:
+            kind, value, _role = events.get(timeout=0.1)
+        except queue.Empty:
+            kind = None
+        if kind == "mag":
+            readings.append(raw_to_ut(*value["raw"]))
+        elif kind == "status":
+            print("  ", value)
+        if time.monotonic() >= next_note:
+            next_note += 5.0
+            print(f"  {int(end - time.monotonic())} s left, {len(readings)} readings")
+    try:
+        offset, radius, err = fit_sphere_offset(readings)
+    except ValueError as exc:
+        print("Could not calibrate:", exc)
+        return False
+    print(f"Offset (uT): x {offset[0]:.1f}  y {offset[1]:.1f}  z {offset[2]:.1f}")
+    print(f"Field strength after removing it: {radius:.1f} uT (Earth's is roughly 25 to 65)")
+    print(f"Fit error: {err:.1f} uT")
+    if not 15.0 <= radius <= 90.0:
+        print("That strength is outside the normal range: there may be a magnet or steel close "
+              "by, or not all orientations were covered. Try again somewhere clearer.")
+    if err > 0.2 * radius:
+        print("The fit is poor (the readings do not lie on a sphere): turn it through more "
+              "orientations and keep it away from metal.")
+    Path(OFFSET_FILE).write_text(json.dumps({"offset": list(offset), "radius_ut": radius}),
+                                 encoding="utf-8")
+    print(f"Saved {OFFSET_FILE}. --watch uses it from now on.")
+    return True
+
+
+def run_watch(args) -> bool:
+    """Live: one line a second saying whether the board is sliding up/down, sliding
+    sideways, turning, or still, using both sensors. They need not be fixed together
+    to read each on its own, but they must be for the phrase to be meaningful."""
     og_port, mag_port = pick_ports(args)
+    offset = load_offset()
     events: queue.Queue = queue.Queue()
     OgLink(og_port, events, role="og", on_connect=("STREAM 50",)).start()
     MagLink(mag_port, events, role="mag").start()
     print(f"Accelerometer on {og_port}, magnetometer on {mag_port}. One line a second; Ctrl-C stops.")
-    print(f"'moving' means the accelerometer changed by {ACCEL_CHANGE_MG:.0f} mg or more, "
-          f"or the magnetometer by {MAG_CHANGE_UT:.0f} uT or more, within that second.")
+    if offset is None:
+        print("No magnetometer calibration yet (run with --calibrate once). Until then, turning is "
+              "judged from how much the field readings change, which is much less sensitive.")
+    else:
+        print(f"Using the saved magnetometer offset from {OFFSET_FILE}.")
+    print("Fix the two boards together, then try: slide it up and down; slide it sideways; turn it.")
+    print("A slide is only felt while it speeds up or slows down; a slow smooth move is hard to see.")
     print()
     accel, mag = [], []
     next_report = time.monotonic() + 1.0
@@ -206,15 +293,23 @@ def run_watch(args) -> bool:
                 print("  ", value)
             if time.monotonic() >= next_report:
                 next_report += 1.0
-                a_text = "no data" if not accel else (
-                    f"{vector_change_rms(accel):5.0f} mg  "
-                    f"{'MOVING' if vector_change_rms(accel) >= ACCEL_CHANGE_MG else 'still '}")
-                m_text = "no data" if not mag else (
-                    f"{vector_change_rms(mag):5.1f} uT  "
-                    f"{'MOVING' if vector_change_rms(mag) >= MAG_CHANGE_UT else 'still '}")
-                strength = (sum(norm(v) for v in mag) / len(mag)) if mag else float("nan")
-                print(f"accelerometer {a_text:>20} | magnetometer {m_text:>20} | "
-                      f"|B| {strength:5.1f} uT | readings {len(accel):3d} / {len(mag):3d}")
+                if accel and mag:
+                    vertical, horizontal = split_accel_motion(accel)
+                    if offset is not None:
+                        turn = mag_turn_deg(mag, offset)
+                        turned = turn >= TURN_DEG
+                        mag_text = f"field turned {turn:5.1f} deg"
+                    else:
+                        change = vector_change_rms(mag)
+                        turned = change >= MAG_CHANGE_UT
+                        mag_text = f"field changed {change:5.1f} uT"
+                    tilt = estimate_tilt_mg(turn if offset is not None else None,
+                                            None if offset is not None else change)
+                    phrase = describe_motion(vertical, horizontal, tilt, turned)
+                    print(f"accelerometer: up/down {vertical:4.0f} mg, sideways {horizontal:4.0f} mg"
+                          f" | {mag_text} | turn explains ~{tilt:3.0f} mg | {phrase}")
+                else:
+                    print(f"no data this second (accelerometer {len(accel)}, magnetometer {len(mag)})")
                 accel, mag = [], []
     except KeyboardInterrupt:
         print()
@@ -228,10 +323,19 @@ def main() -> None:
     ap.add_argument("--og-port", help="OG display CPU serial port (accelerometer)")
     ap.add_argument("--mag-port", help="OG main CPU serial port (magnetometer)")
     ap.add_argument("--csv-out", help="write every paired reading to this CSV")
+    ap.add_argument("--calibrate", action="store_true",
+                    help="find the magnetometer's fixed offset by turning it through every direction")
     ap.add_argument("--watch", action="store_true",
                     help="live meters for each sensor on its own (they need not be fixed together)")
     args = ap.parse_args()
-    ok = run_simulated() if args.simulate else run_watch(args) if args.watch else run_live(args)
+    if args.calibrate:
+        ok = run_calibrate(args)
+    elif args.simulate:
+        ok = run_simulated()
+    elif args.watch:
+        ok = run_watch(args)
+    else:
+        ok = run_live(args)
     sys.exit(0 if ok else 1)
 
 

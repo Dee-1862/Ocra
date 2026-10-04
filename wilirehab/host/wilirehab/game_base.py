@@ -1,36 +1,25 @@
-"""Catch game, and the base class every other game builds on.
+"""The base class every game builds on.
 
-Stars fall; move the basket under them. It is the button-map demo with a game
-drawn in its body area, so the legend, ring animation, banner, log and the
-real-OG input are all inherited from mapping_demo.
+It is the button-map demo with a game drawn in its body area, so the legend, ring
+animation, banner, log and the real-OG input all come from mapping_demo. This class adds:
+the play / pause / end / pain check-in / summary flow, the OG link (one OG), tilt trackers
+for roll and pitch, per-hand statistics, tremor, the data table and the numbers-only log.
+
+A game subclasses GameApp and overrides what it needs: _new_round, _advance, _draw_field,
+_summary_lines, _end_fields, and optionally _apply, _on_key and _on_acc (call super()).
 
 Controls (see button_map.py, Gameplay screen):
     yellow = Left   blue = Right   green = Pause   gray = Pain now   red = End
 Press flow: play -> (pause) -> end? -> pain check-in -> summary -> new round.
 
-Difficulty adapts in two small steps so it stays easy to follow:
-  - every 5 catches in a row it speeds up a little
-  - a miss, or a "Pain now" press, slows it down
-
-One or two OGs (left_hand, right_hand). Every OG's tilt is measured per hand;
-with both present the summary adds a symmetry table. Only the *driver* OG
-steers this game. A button on either OG acts as that button.
-
 Only numbers are logged: sessions/session-<time>.jsonl (events) and
-sessions/data-<time>.csv (every reading, with its hand).
-
-Run from wilirehab/host:
-    python -m wilirehab.catch_game
-    python -m wilirehab.catch_game --port COM5 --tilt        # one OG steers
-    python -m wilirehab.catch_game --tilt --driver left_hand  # two OGs, left steers
-Keys while testing without the OG: 1 gray, 2 yellow, 3 green, 4 blue, 5 red;
-z sets neutral; l / r set your own left / right tilt range (tilt mode).
+sessions/data-<time>.csv (every reading).
+Keys while testing without the OG: 1 gray, 2 yellow, 3 green, 4 blue, 5 red; z sets neutral.
 """
 from __future__ import annotations
 
 import argparse
 import queue
-import random
 import time
 import tkinter as tk
 from collections import deque
@@ -49,16 +38,9 @@ from .session import SessionLog
 from .tilt import TiltTracker, raw_to_mg, to_position
 
 FIELD = (24, 104, W - 24, 282)    # x0, y0, x1, y1 on the canvas
-STEP = 0.10                       # basket move per press, as a fraction of the field
-CATCH_HALF = 0.09                 # half the basket width, same units
-BASE_SPEED = 0.45                 # fall speed, field heights per second
-MIN_SPEED, MAX_SPEED = 0.20, 1.20
-BASE_GAP, MIN_GAP, MAX_GAP = 1.4, 0.7, 2.2   # seconds between stars
+STEP = 0.10                       # paddle move per press without an OG, a fraction of the field
 TICK_MS = 33
 TILT_SLEW = 2.5                   # fastest the basket may move when tilt-steered, field widths/s
-
-STAR = "#f5c400"
-BASKET = "#22c55e"
 
 # (screen, label pressed) -> screen to go to.
 NEXT = {
@@ -73,7 +55,7 @@ NEXT = {
 class TeeLog:
     """The session log, which also feeds the live data table.
 
-    Every game event (catch, miss, hit, pain score, ...) lands in both, so the
+    Every game event (hit, miss, pain score, ...) lands in both, so the
     call sites do not change. "tilt" is skipped here because the table gets a
     richer tilt row straight from the sensor. A `role=` field names the hand.
     """
@@ -94,7 +76,7 @@ class TeeLog:
 
 
 class GameApp(App):
-    TITLE = "WiliRehab catch game"
+    TITLE = "WiliRehab game"
     # What the summary's fatigue line tracks, or None for no trend line:
     # (label, unit, multiply values by, "steady" below this per minute, higher is better).
     PERF = ("Success rate", "%", 100.0, 2.0, True)
@@ -172,14 +154,7 @@ class GameApp(App):
 
     def _new_round(self) -> None:
         self.bx = 0.5
-        self.items: list[dict] = []
-        self.caught = 0
-        self.missed = 0
-        self.streak = 0
         self.pain_events = 0
-        self.speed = BASE_SPEED
-        self.gap = BASE_GAP
-        self.since_spawn = 0.0
         self.play_seconds = 0.0
         self.stats = {r: HandStats() for r in self.roles}
         self.perf_points: list = []                 # (play seconds, value) for the trend
@@ -341,7 +316,6 @@ class GameApp(App):
                     self.bx = min(1.0, self.bx + STEP)
             elif label == "Pain now":
                 self.pain_events += 1
-                self.speed = max(MIN_SPEED, self.speed * 0.8)
                 self.session.record("pain_now", at_s=round(self.play_seconds, 1))
                 return
             elif label in ("Pause", "End"):
@@ -362,7 +336,7 @@ class GameApp(App):
 
     def _end_fields(self) -> dict:
         """Game-specific numbers for the session_end row; games override this."""
-        return {"caught": self.caught, "missed": self.missed}
+        return {}
 
     def _end_session(self) -> None:
         """Log the headline numbers, one row per hand, then the comparison."""
@@ -416,40 +390,8 @@ class GameApp(App):
         self.root.after(TICK_MS, self._game_tick)
 
     def _advance(self, dt: float) -> None:
+        """Called every frame while playing. Games override this."""
         self.play_seconds += dt
-        self.since_spawn += dt
-        if self.since_spawn >= self.gap:
-            self.since_spawn = 0.0
-            self.items.append({"x": random.uniform(0.08, 0.92), "y": 0.0})
-        still_falling = []
-        for it in self.items:
-            it["y"] += self.speed * dt
-            if it["y"] < 1.0:
-                still_falling.append(it)
-            elif abs(it["x"] - self.bx) <= CATCH_HALF:
-                self._on_catch()
-            else:
-                self._on_miss()
-        self.items = still_falling
-
-    def _on_catch(self) -> None:
-        self.caught += 1
-        self.streak += 1
-        self._attempt(self.driver, True)
-        self._perf(1)
-        if self.streak % 5 == 0:
-            self.speed = min(MAX_SPEED, self.speed * 1.1)
-            self.gap = max(MIN_GAP, self.gap * 0.95)
-        self.session.record("catch", n=self.caught, speed=round(self.speed, 2))
-
-    def _on_miss(self) -> None:
-        self.missed += 1
-        self.streak = 0
-        self._attempt(self.driver, False)
-        self._perf(0)
-        self.speed = max(MIN_SPEED, self.speed * 0.9)
-        self.gap = min(MAX_GAP, self.gap * 1.05)
-        self.session.record("miss", n=self.missed, speed=round(self.speed, 2))
 
     # ---- drawing -----------------------------------------------------
 
@@ -465,38 +407,13 @@ class GameApp(App):
             self._draw_summary()
 
     def _draw_field(self, dim: bool) -> None:
-        c = self.canvas
+        """Draw the play area. Games override this."""
         x0, y0, x1, y1 = FIELD
-        w = x1 - x0
-        basket_y = y1 - 14
-        top = y0 + 10
-        bottom = basket_y - 12
-        c.create_rectangle(x0, y0, x1, y1, outline="#30363d", tags="body")
-        star = blend(STAR, PANEL, 0.6) if dim else STAR
-        for it in self.items:
-            cx = x0 + it["x"] * w
-            cy = top + it["y"] * (bottom - top)
-            c.create_oval(cx - 9, cy - 9, cx + 9, cy + 9, fill=star, outline="", tags="body")
-        bx = x0 + self.bx * w
-        half = CATCH_HALF * w
-        c.create_rectangle(bx - half, basket_y - 7, bx + half, basket_y + 7,
-                           fill=blend(BASKET, PANEL, 0.6) if dim else BASKET,
-                           outline="", tags="body")
-        c.create_text(x0 + 8, y0 + 6, anchor="nw", fill=DIM, font=("Segoe UI", 11),
-                      text=f"Caught {self.caught}    Missed {self.missed}    "
-                           f"Speed {self.speed / BASE_SPEED:.1f}x"
-                           + (f"    Tilt {self.tilt_angle:+.0f} deg"
-                              + ("" if self.tracker.steady else " (shaky)")
-                              if self.tilt_mode else ""),
-                      tags="body")
-        if self.screen.key == "paused":
-            c.create_text((x0 + x1) / 2, (y0 + y1) / 2, text="PAUSED", fill=FG,
-                          font=("Segoe UI", 34, "bold"), tags="body")
+        self.canvas.create_rectangle(x0, y0, x1, y1, outline="#30363d", tags="body")
 
     def _summary_lines(self) -> list:
+        """The game's own summary lines (up to five). Games override this."""
         return [
-            f"Caught  {self.caught}",
-            f"Missed  {self.missed}",
             f"Pain-now presses  {self.pain_events}",
             f"Pain score  {self.last_pain if self.last_pain is not None else '-'}",
             f"Time  {self.play_seconds:.0f} s",
@@ -542,26 +459,3 @@ def build_game_args(description: str):
     ap = argparse.ArgumentParser(description=description)
     add_common_args(ap)
     return ap
-
-
-def main() -> None:
-    ap = build_game_args("WiliRehab catch game")
-    ap.add_argument("--tilt", action="store_true",
-                    help="steer by tilting the driver OG; press z to set neutral")
-    ap.add_argument("--range-deg", type=float, default=12.0,
-                    help="starting tilt that reaches each edge (default 12); "
-                         "press l and r in the window to set your own")
-    args = ap.parse_args()
-    ports = resolve_ports(args)
-    if args.tilt and not ports:
-        ap.error("--tilt needs an OG: pass --port COM5 or set up devices.json")
-    root = tk.Tk()
-    GameApp(root, ports, args.log_dir, tilt=args.tilt, axis=args.axis,
-            invert_roles=parse_roles(args.invert_roles), range_deg=args.range_deg,
-            driver=args.driver, stream=bool(ports),
-            invert_fwd_roles=parse_roles(args.invert_fwd_roles))
-    root.mainloop()
-
-
-if __name__ == "__main__":
-    main()

@@ -1,5 +1,7 @@
 # Manual test cards
 
+> **Note (2026-10-04):** the games now use a single OG. Cards 10 and 11 describe the earlier two-OG setup and no longer apply. The Catch, Mirror Hand and Beat Saber games were removed on 2026-10-04, and their cards with them.
+
 You run these; the assistant does not (see rules-book R1). Paste back the "Report" line.
 
 ## Card 1: Build the WiliRehab firmware
@@ -73,7 +75,7 @@ cd wilirehab/host
 python -m pytest tests -q
 python -m wilirehab.mapping_demo
 ```
-**Expect (pytest):** `158 passed`.
+**Expect (pytest):** `185 passed`.
 **Expect (demo):** a window with a screen list on the left and an OG-style screen on the right. Along the bottom of that screen are five coloured circles (gray, yellow, green, blue, red), each with a one or two word label. Unused buttons are dashed circles marked "not used".
 Check on **every** screen (click a screen name, or Left/Right arrows):
 1. The labels match the table in `button-map-and-motion-data.md`.
@@ -88,66 +90,13 @@ python -m wilirehab.mapping_demo --port COM5
 **If the window is blank or errors:** paste the traceback. If pytest says `No module named wilirehab`, you are not in `wilirehab/host`.
 **Report:** "Card 5: pytest pass/fail; demo ok / what looked wrong".
 
-## Card 6: Catch game, first with the keyboard, then with the OG
-**Where:** terminal in `wilirehab/host`, `.venv` active.
-```
-python -m pytest tests -q
-python -m wilirehab.catch_game
-```
-**Expect (pytest):** `158 passed`.
-**Expect (game):** the OG-style screen titled "Gameplay". Yellow stars fall inside a box, a green basket sits at the bottom, a counter shows Caught / Missed / Speed. The legend now reads: gray **Pain now**, yellow **Left**, green **Pause**, blue **Right**, red **End**.
-Check, using keys 1 to 5 (2 = Left, 4 = Right):
-1. Left and Right move the basket; each press also plays the ring animation.
-2. Catching a star raises Caught; letting one hit the floor raises Missed and slows the game a little.
-3. Pause (3) shows PAUSED and the legend changes to Resume / End. Resume continues.
-4. Red (5) goes to "End session?". Keep going returns to the game; End now goes to the pain screen.
-5. Pain screen: +1 / -1 change the number, Confirm goes to the summary showing caught, missed, pain-now presses, pain score, time.
-6. Done (3 on the summary) starts a fresh round.
-A file `sessions/session-<time>.jsonl` appears in `wilirehab/host`. Open it: every line should be numbers and short words only.
-**With the real OG** (close any console first):
-```
-python -m wilirehab.catch_game --port COM5
-```
-**Expect:** the OG yellow and blue buttons move the basket; the sidebar says `Listening to the OG on COM5`.
-**If the sidebar says `Serial stopped: ...`:** paste that line. **If nothing moves on real presses:** run Card 3 first to confirm the OG prints `BTN ... down`.
-**Report:** "Card 6: pytest pass/fail; keyboard ok / problem; OG ok / problem".
-
-## Card 7: Tilt steering (new firmware: rebuild and reflash first)
-**Where:** repo root, `.venv` active, USB connected.
-```
-python tools/fw.py build wilirehab_main
-python tools/fw.py flash wilirehab_main
-```
-Wait until the OG shows `WiliRehab`, then re-list ports and use the `093C:2055` one (see Card 2).
-**Part A, raw stream.**
-```
-python tools/fw.py console --port COM5
-```
-Type `STREAM 10`.
-**Expect:** `OK`, then about ten lines a second like `ACC 3 20450 120 -64 16008`. With the OG flat and screen up, the third number (z) is near 16000 and x, y near 0. Tilt the OG: x or y changes by thousands. Type `STREAM 0`: the lines stop. Close the console.
-**If** you get `ERR accel not-initialised`: paste it, the accelerometer did not start.
-**Part B, the game steered by tilt.**
-```
-cd wilirehab/host
-python -m pytest tests -q
-python -m wilirehab.catch_game --port COM5 --tilt
-```
-Hold or strap the OG in a comfortable pose, then press **z** in the window to set that as neutral. Tilt left and right.
-**Expect:** the basket follows the tilt; the top-left counter shows `Tilt +NN deg`. Leave it still and the basket stays centred. Shake it hard and the counter adds `(shaky)`.
-**Set your own range** (a therapist or you): tilt as far **left** as is comfortable and press **l**; tilt as far **right** and press **r**. The status line (left sidebar) confirms the angles. After that the basket should reach each edge at your limits. The start range is 12 degrees each way.
-**Steadiness check:** hold the OG still for 10 seconds. The basket should stay put, not drift or twitch. A tilt under about 1.5 degrees is ignored on purpose.
-**Fixes:** basket moves the wrong way: add `--invert`. Tilting does nothing but a different tilt direction does: add `--axis x`. Still too twitchy: strap the OG instead of holding it, and tell me. Too sluggish: tell me.
-In this mode yellow and blue (Left/Right) do nothing; the other buttons still work.
-A `sessions/*.jsonl` file should now contain `tilt` lines with a number and `steady`.
-**Report:** "Card 7: part A ok / output; part B ok / which flag needed".
-
 ## Card 8: Rhythm Flick
 **Where:** `wilirehab/host`, `.venv` active. No reflash needed (uses the same `STREAM` as Card 7).
 ```
 python -m pytest tests -q
 python -m wilirehab.rhythm_flick
 ```
-**Expect (pytest):** `158 passed`.
+**Expect (pytest):** `185 passed`.
 **Part A, keyboard and buttons only.** Arrows fall one per beat toward a grey line. Press yellow (key 2) for a left arrow and blue (key 4) for a right arrow as it reaches the line.
 **Expect:** a correct press near the line shows HIT and raises Hits; the wrong direction shows WRONG WAY; an arrow that passes unanswered shows MISS. Top-left shows Hits, Misses and Tempo. Get 8 hits in a row: Tempo rises by 5. Miss 3 in a row: it drops by 5. Press gray (Pain now): Tempo drops by 10. The pause, end, pain and summary screens behave as in the catch game.
 **Part B, flick the real OG** (close any console first):
@@ -158,19 +107,19 @@ Hold or strap the OG and flick it left and right as arrows land.
 **Fixes:** left and right swapped: add `--invert`. No flicks register: add `--flick-dps 90` (lower is easier). Flicks fire by accident: raise `--flick-dps 220`. A different tilt direction works instead of the sideways one: add `--axis x`. Up and down too: add `--dirs all` (keys u / d work without the OG; `--invert-fwd` swaps them).
 **Report:** "Card 8: part A ok / problem; part B ok / which flags I needed".
 
-## Card 9: Data sidebar (catch game and Rhythm Flick)
+## Card 9: Data sidebar (any game)
 **Where:** `wilirehab/host`, `.venv` active. No reflash needed.
 ```
 python -m pytest tests -q
-python -m wilirehab.catch_game --port COM5 --tilt
+python -m wilirehab.brick_break
 ```
-**Expect (pytest):** `158 passed`.
+**Expect (pytest):** `185 passed`.
 **Expect (window):** a third panel on the right (the window is about 1300 px wide) with two tables.
 - **Live sensors** (top): one row per data channel with source, channel, latest value and age. Move the OG: `og acc` shows `x_mg= y_mg= z_mg=` changing and an age near 0.0s, and `og tilt` shows the angle. Press a button: `og button` shows the colour, the action and the screen. Rows older than 2 s turn grey. Sensors we plan but do not have yet show as `not connected` (forearm accelerometer, BNO085 IMU, haptic driver, force sensor).
 - **Timeline** (bottom): newest row first, each with a time in seconds from when the window opened. Fast sensors (acc, tilt) show about 4 rows a second so you can read them; buttons and game events (catch, miss, pain score) show every time. The **freeze** box stops the scrolling so you can read it.
 **Check the timestamps line up:** press a button, then look at its timeline row and at the game's log line under the game; the times should agree to within a fraction of a second.
 **The CSV:** close the window, then open `wilirehab/host/sessions/data-<time>.csv`. It has every row at full rate (about 50 acc rows a second), with columns `t_s, source, channel, dev_ms, fields`. `dev_ms` is the OG's own clock for OG rows.
-**Without the OG:** `python -m wilirehab.catch_game` works too. Only keyboard and game rows appear; `og acc` and `og tilt` are simply absent.
+**Without the OG:** `python -m wilirehab.brick_break --no-og` works too. Only keyboard and game rows appear; `og acc` and `og tilt` are simply absent.
 **If the window is too wide for your screen:** tell me the resolution.
 **Report:** "Card 9: pytest pass/fail; live table ok / problem; timeline ok / problem; CSV ok / problem".
 
@@ -180,7 +129,7 @@ python -m wilirehab.catch_game --port COM5 --tilt
 python -m pytest tests -q
 python -m wilirehab.devices
 ```
-**Expect (pytest):** `158 passed`.
+**Expect (pytest):** `185 passed`.
 **Expect (devices):** `OG display CPUs found: 2` and a line per OG with its port and USB serial. (If you see 1, the second OG is not enumerating: paste `python -m serial.tools.list_ports -v`.)
 Then assign them:
 ```
@@ -201,16 +150,6 @@ python -m wilirehab.rhythm_flick --devices devices.json
 Finish a round (red, then green on "End session?", pain, confirm). **Expect on the summary:** a small table with Range, Peak deg/s and Hit rate for L and R, a ratio, and which side is weaker.
 **Report:** "Card 11: lanes ok / problem; hand tagging ok / problem; symmetry table ok / problem; flags needed".
 
-## Card 12: Mirror hand
-**Where:** `wilirehab/host`.
-```
-python -m wilirehab.mirror_hand --devices devices.json --driver right_hand
-```
-**Expect:** two drawn hands. The right one (green) turns as you tilt the right-hand OG; the left one (yellow) is its mirror image, turning the opposite way. If the left OG is worn, a dashed grey ghost shows its real tilt on top of the yellow hand, and the top line shows `Match NN%` and the error in degrees. The window shows angles magnified 2x; the table shows the real ones.
-**Check:** `--driver left_hand` swaps which side drives. Without OGs, yellow/blue (keys 2 / 4) nudge the driver hand by 5 degrees.
-**If the ghost moves the wrong way against the yellow hand:** `--invert-roles left_hand`.
-**Report:** "Card 12: drawing ok / problem; ghost and match ok / problem; mirror direction right / flipped".
-
 ## Card 13: Dial
 **Where:** `wilirehab/host`. Rest the forearm flat (a towel roll), OG on the back of the hand or forearm, screen up.
 ```
@@ -227,20 +166,24 @@ python -m wilirehab.dial_game --port COM5
 python -m pytest tests -q
 python -m wilirehab.launcher
 ```
-**Expect (pytest):** `158 passed`.
-**Expect (launcher):** a window listing seven games, each with a Start button, a one-line description and the movement it uses, plus the connected OGs and their roles. Only one program can hold an OG's serial port, so **start one game at a time** and close it before opening another that uses the OGs.
+**Expect (pytest):** `185 passed`.
+**Expect (launcher):** a window listing five games, each with a Start button, a one-line description and the movement it uses, plus the connected OGs and their roles. Only one program can hold an OG's serial port, so **start one game at a time** and close it before opening another that uses the OGs.
 The options box adds command-line options for the next game, for example `--invert-roles left_hand`.
 **Report:** "Card 14: pytest pass/fail; launcher opens ok / problem; device list correct yes / no".
 
-## Card 15: Brick Break
-**Where:** `wilirehab/host`.
+## Card 15: Brick Break (fixed after your recorded session)
+**What your session showed:** the steering pitch only went one way from the starting pose (0 down to about -18 degrees, never above 0), so the paddle could only reach the left half of the field. 8 drops against 13 bricks in 27 seconds. Two changes: the game now **learns your tilt range as you play** and stretches it over the whole field, and the ball **waits on the paddle for 0.8 s** before every serve.
 ```
-python -m wilirehab.brick_break --devices devices.json
+cd wilirehab/host
+python -m pytest tests -q
+python -m wilirehab.brick_break
 ```
-Tilt the driver OG forward and back with the forearm flat; press **z** first for neutral.
-**Expect:** a wall of coloured bricks, a ball and a blue paddle. The paddle moves left and right as you tilt forward and back (the top line says `Steer: wrist up/down (pitch)`). The ball breaks bricks, speeds up after each cleared wall and slows after a drop. Yellow / blue (keys 2 / 4) nudge the paddle without an OG.
-**Fixes:** paddle goes the wrong way: `--invert-fwd-roles right_hand`. Nothing moves but a sideways tilt does: `--movement roll`, or `--axis x`. Range too big or small: tilt fully each way and press **l** and **r**.
-**Report:** "Card 15: paddle follows pitch yes / no; ball and bricks behave yes / problem; flags needed".
+**Expect (pytest):** `185 passed`.
+**Expect (game):** a wall of bricks, a ball and a paddle. The ball sits on the paddle for a moment before each serve, then launches. Tilt the OG **sideways**, however far you can manage, even only one way from where you started: the paddle should reach **both** edges of the field, and the top line shows `Range NN deg`, the span it has learned. A small wrist range gives a small span; the paddle still covers the whole field.
+Check: (1) move to your two extremes; the paddle should be at the left edge at one and the right edge at the other; (2) hold still for several seconds; the paddle should not creep; (3) press **z** to learn the range again from where you are.
+**Direction:** the game now steers by sideways tilt (roll). It first steered by forward/back tilt (pitch); your recording showed you tilt mostly sideways (roll moved 2.7 times as much as pitch) and pitch then moved against you about a third of the time, which is what "sometimes the wrong direction" was. If the paddle goes the wrong way every time, add `--invert-roles right_hand`; to steer by forward/back tilt instead, `--movement pitch`.
+**Fixes:** The paddle still jitters: tell me, with how big the movement of the board is at the time. To get the old fixed mapping: `--fixed-range --range-deg 18` (l and r then set your range).
+**Report:** "Card 15: paddle reaches both edges yes / no; serve delay ok; drops per minute roughly; range shown N deg".
 
 ## Card 16: Steady Hand
 ```
@@ -276,7 +219,7 @@ python -m wilirehab.brick_break --devices devices.json
 python -m wilirehab.rhythm_flick --devices devices.json
 python -m wilirehab.steady_hand --devices devices.json
 ```
-**Expect (pytest):** `158 passed`.
+**Expect (pytest):** `185 passed`.
 **Brick Break:** the paddle should look steadier with a still hand and follow a real tilt with about a third of the delay. The default range is now 18 degrees (it was 12) and the paddle is wider, so each degree moves it less. Rolling the OG sideways should no longer drag the paddle (pitch no longer picks up roll).
 **Rhythm Flick:** one flick should now give one detection. The detector needs a real 8 degree move, ignores the return stroke, and re-arms only after the hand has been still for a moment. In your recorded session the old detector fired 44 times for 23 arrows; the new one fires 14 times, and from about 17 s on they land within about 0.1 s of each arrow's result. **Because of that, a flick must now be a clear, quick move and a pause before the next one.** If real flicks are missed: `--flick-dps 100`.
 **Steady Hand:** the cursor is steadier and less delayed. It still moves because the OG rotates, which is what it measures: a hand movement that does not tilt the OG is invisible to it.
@@ -316,7 +259,7 @@ cd wilirehab/host
 python -m pytest tests -q
 python -m wilirehab.mag_accel_tester --simulate
 ```
-**Expect (pytest):** `158 passed`. **Expect (simulate):** a table of five actions (still, spin, tilt, shake, magnet) with `ok yes` on every row. Read it as the pattern a working pair should show: spinning flat moves only the magnetometer; shaking moves only the accelerometer; tilting moves both; a magnet changes the field *strength* while gravity stays put. It says SIMULATED at the top; it is not your sensors.
+**Expect (pytest):** `185 passed`. **Expect (simulate):** a table of five actions (still, spin, tilt, shake, magnet) with `ok yes` on every row. Read it as the pattern a working pair should show: spinning flat moves only the magnetometer; shaking moves only the accelerometer; tilting moves both; a magnet changes the field *strength* while gravity stays put. It says SIMULATED at the top; it is not your sensors.
 **Then with the real sensors (Card 20 working, MAG lines streaming):** fix the BMM350 board to the OG with tape or a rubber band so they always move together, keep the jumper wires slack, then:
 ```
 python -m wilirehab.mag_accel_tester --og-port COM5 --mag-port COM4 --csv-out mag_test.csv
@@ -329,6 +272,31 @@ python -m wilirehab.mag_accel_tester --og-port COM5 --mag-port COM4 --csv-out ma
 - **magnet:** move a magnet or a steel object near the magnetometer, in and out. Type `s` to skip if you have none.
 **Expect:** a table like the simulated one. The "looked like" column should match "expected". Rows that say NO are informative, not failures of the tester: for example a sloppy spin that also tilts will read as "tilting".
 **Report:** paste the table and the sanity line.
+
+## Card 23: Sliding vs turning (calibrate the magnetometer, then watch)
+Why: an accelerometer alone cannot tell a slide from a tilt. The magnetometer turns only when the board turns, but its large fixed offset hides that until it is measured and removed.
+**Step 1, calibrate once** (BMM350 streaming as in Card 20; close any console first). Keep the board away from the laptop, metal and magnets:
+```
+cd wilirehab/host
+python -m pytest tests -q
+python -m wilirehab.mag_accel_tester --calibrate --mag-port COM4
+```
+**Expect (pytest):** `185 passed`. When it says GO, turn the board slowly through **every** orientation for 25 seconds: flip it over, spin it, point each edge up and down. **Expect:** an offset line, then `Field strength after removing it: NN uT`, which should land roughly between 25 and 65 (Earth's field), and a small fit error. It saves `mag_offset.json`. If the strength is far outside that, or it says the fit is poor, repeat somewhere clearer and cover more directions.
+**Step 2, watch.** Tape the BMM350 board to the OG so they move together, then:
+```
+python -m wilirehab.mag_accel_tester --watch --og-port COM5 --mag-port COM4
+```
+It prints one line a second: how much the accelerometer moved **along gravity** (up/down) and **across it** (sideways), how far the field direction **turned**, and a phrase. Try, about 10 seconds each:
+- **slide it up and down:** expect `sliding up/down`. If the board also turns a little, as a hand moving up and down usually makes it, the line says `sliding up/down while turning`: the movement along gravity only comes from a real vertical slide, so it is no longer hidden by the turn;
+- **slide it sideways** with quick pushes: expect `sliding sideways`;
+- **turn or tilt it:** expect `turning / tilting` and a field turn of 8 degrees or more. The sideways accelerometer movement caused by the turn itself is subtracted, so a pure tilt is not called a sideways slide.
+**A fair test needs the right movements.** Moving a hand-held board almost always turns it, which is why a first uncalibrated run called nearly everything a turn. For a clean comparison:
+- **up/down:** set the taped boards flat on a thick book and lift the book straight up and down, keeping it level (little turning);
+- **sideways:** slide the boards across a smooth table with quick short pushes (no turning);
+- **turning:** rotate them in your hand in place.
+Each line also shows `turn explains ~N mg`: how much of the sideways movement the turning alone accounts for. Whatever is left over beyond that, and beyond half of it (the estimate is rough), is called a slide. A pure turn gives about 25 mg of sideways movement per microtesla of field change; a slide gives much less field change for the same movement.
+**Limits you should expect to see:** a slow, smooth slide at steady speed is only felt as it starts and stops, so it can look still; quick short pushes show up better. Moving a hand up and down usually tilts it a little as well, so you may see `turning / tilting` when you meant a slide; keep the board level to test a pure slide. Metal or a magnet nearby also turns the field reading.
+**Report:** paste about 30 lines, and say which line is which movement.
 
 ## Results log
 | Date | Card | Result | Notes |

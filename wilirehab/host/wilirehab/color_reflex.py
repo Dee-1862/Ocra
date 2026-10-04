@@ -28,7 +28,7 @@ from statistics import median
 
 from .bilateral import LEFT, RIGHT
 from .button_map import BUTTONS, COLORS, REFLEX_PLAY
-from .catch_game import FIELD, GameApp, build_game_args
+from .game_base import FIELD, GameApp, build_game_args
 from .cli import parse_roles, resolve_ports
 from .mapping_demo import DIM, FG, PANEL, blend
 from .measures import ReactionStats

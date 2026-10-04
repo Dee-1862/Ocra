@@ -13,12 +13,10 @@ Two specific cautions:
 
 | # | Game | Needs | Can build now with the OG? | Status |
 |---|---|---|---|---|
-| 1 | Catch (first game) | OG tilt or buttons | yes | built, tilt steering seen working |
 | 2 | **Rhythm Flick** (arrows on a beat, flick the wrist; L/R lanes with two OGs) | OG accelerometer | yes | **built**, not yet run |
 | 3 | Wrist path (follow a moving target) | hand tilt; a true wrist angle needs a forearm sensor | tilt version yes | not built |
-| 4 | **Mirror hand** (driver OG turns a drawn hand, mirror on the other side) | one OG, or two | yes | **built**, not yet run |
 | 5 | **Dial** (roll the OG to match a target) | OG roll, forearm flat | yes | **built**, not yet run |
-| 9 | **Brick Break** (paddle and ball) | OG pitch (wrist up/down), or roll | yes | **built**, not yet run |
+| 9 | **Brick Break** (paddle and ball) | OG roll (sideways tilt), or pitch with --movement pitch | yes | **built**, not yet run |
 | 10 | **Steady Hand** (hold a cursor in a ring) | OG roll and pitch together | yes | **built**, not yet run |
 | 11 | **Colour Reflex** (press the colour that lights) | OG buttons only | yes | **built**, not yet run |
 | 6 | Squeeze meter | force sensor (FSR) + ADC | needs parts | not built |
@@ -35,13 +33,11 @@ My suggested order: 2 (done), 4 (fits the limb-loss scope best), 3, then whichev
 
 | Game | Input from the OG | Movement or measure |
 |---|---|---|
-| Catch | roll (default) | forearm rotation, one axis |
-| Brick Break | **pitch** (default) | wrist flexion/extension, one axis, the other one |
+| Brick Break | **roll** (default), pitch optional | forearm rotation; defaulted to pitch first, but a recorded session showed people tilt sideways |
 | Rhythm Flick | fast changes of roll **and** pitch | quick flicks in four directions |
 | Steady Hand | roll **and** pitch together | two-axis steadiness; tremor |
 | Colour Reflex | five buttons, no tilt | reaction time; button hold time |
 | Dial | roll, wide range | forearm rotation to a target |
-| Mirror Hand | roll, drawn as a hand | mirror therapy view; two-hand comparison |
 
 Still limited by one accelerometer per hand: tilt only, no yaw, no true position. Left/right and up/down **position** of the hand is not measured by any of these.
 
@@ -66,7 +62,7 @@ Hardware now: **two FREE-WILi OGs, one strapped to each hand.** No ESP32, no bre
 **What is built (all unrun until you test it):**
 - **Roles by USB serial number.** `devices.json` maps `left_hand` and `right_hand` to the OG's USB serial; `python -m wilirehab.devices --setup` fills it by asking you to press a button on each OG. Every data row carries its hand.
 - **Rhythm Flick with two hands.** Arrows are marked L or R and fall in that hand's lane; a flick counts only from the matching hand's OG.
-- **Mirror hand.** The driver OG's tilt turns a drawn hand; the other side shows the mirror image. If the other hand has an OG, its real tilt is drawn as a dashed ghost and the match is logged.
+- (Removed 2026-10-04: Mirror hand.) The driver OG's tilt turned a drawn hand; the other side shows the mirror image. If the other hand has an OG, its real tilt is drawn as a dashed ghost and the match is logged.
 - **Dial.** Roll the OG to match a target angle and hold it.
 - **Symmetry table** on every summary when both OGs are present: range, peak speed and hit rate per hand, with the weaker/stronger ratio.
 

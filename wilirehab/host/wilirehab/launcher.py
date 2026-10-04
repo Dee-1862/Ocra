@@ -25,10 +25,8 @@ GREEN = "#22c55e"
 
 # (module, name, what you do, movement or measure it uses)
 GAMES = (
-    ("catch_game", "Catch", "Move a basket under falling stars.",
-     "Forearm rotation (roll). Add --tilt to steer with the OG."),
     ("brick_break", "Brick Break", "Bounce a ball off a paddle to break a wall of bricks.",
-     "Wrist flexion/extension (pitch) moves the paddle; --movement roll for rotation."),
+     "Tilt the OG sideways (roll) to move the paddle; --movement pitch for forward/back."),
     ("rhythm_flick", "Rhythm Flick", "Flick the wrist in the arrow's direction as it lands.",
      "Fast flicks on both axes. Two OGs: L and R lanes, matching hand only."),
     ("steady_hand", "Steady Hand", "Hold a cursor inside a ring, then the next ring.",
@@ -37,8 +35,6 @@ GAMES = (
      "Buttons only, no tilt. Measures reaction time and how long buttons are held."),
     ("dial_game", "Dial", "Roll the needle to a target angle and hold it.",
      "Forearm rotation (roll), wide range."),
-    ("mirror_hand", "Mirror Hand", "One hand turns a drawn hand; the other side mirrors it.",
-     "Roll shown as a drawn hand. Mirror view; the other OG's real tilt is compared."),
 )
 
 

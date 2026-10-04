@@ -3,42 +3,6 @@ import random
 import pytest
 
 from wilirehab.dial import DialRound, needle_end
-from wilirehab.handshape import hand_shape, mirrored_angle
-
-
-# ---- hand drawing --------------------------------------------------------
-
-def tips(shape):
-    return [b for _a, b in shape]
-
-
-def test_upright_hand_points_up():
-    shape = hand_shape(0.0)
-    ys = [p[1] for seg in shape for p in seg]
-    assert min(ys) < -60 and max(ys) == pytest.approx(0.0)
-
-
-def test_turning_90_degrees_points_the_hand_right():
-    shape = hand_shape(90.0)
-    xs = [p[0] for seg in shape for p in seg]
-    assert max(xs) > 60 and min(xs) > -35      # the hand now lies to the right
-
-
-def test_left_hand_is_the_mirror_image_of_the_right():
-    right = hand_shape(0.0, left=False)
-    left = hand_shape(0.0, left=True)
-    for (a, b), (c, d) in zip(right, left):
-        assert c == pytest.approx((-a[0], a[1]))
-        assert d == pytest.approx((-b[0], b[1]))
-
-
-def test_mirrored_drawing_is_the_mirror_of_the_driver():
-    # Driver: right hand turned 20 degrees. Mirror: left hand at the negated angle.
-    driver = hand_shape(20.0, left=False)
-    mirror = hand_shape(mirrored_angle(20.0), left=True)
-    for (a, b), (c, d) in zip(driver, mirror):
-        assert c == pytest.approx((-a[0], a[1]))
-        assert d == pytest.approx((-b[0], b[1]))
 
 
 # ---- dial ----------------------------------------------------------------

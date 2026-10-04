@@ -15,7 +15,6 @@ For each row the paper needs two things: **one sentence of context** (why the mo
 | Webcam position of the hand | image-plane position of the hand | Webcam hand tracking is valid enough for range-of-motion work | Measurement 2023 MediaPipe rehabilitation study; Track-UL (JMIR 2026) | lead | |
 | Games as therapy | all games | Gaming and virtual reality add to usual upper-limb care | Afyouni et al. (IUI 2017, opened full per your notes); a Cochrane review of VR and gaming | lead | |
 | Rhythm Flick | repeated paced wrist flicks | Rhythm and music-based training helps upper-limb function; rhythm game precedent | Beat Saber stroke studies and a music-based therapy home-app study (named in your notes) | lead | |
-| Mirror hand | mirrored drawn hand, driver tilt | Mirror therapy has evidence for stroke and phantom-limb pain | Lendaro et al. RCT; a mirror-vs-VR meta-analysis; a Cochrane mirror-therapy review | lead | |
 | Left/right symmetry table | range, peak speed, hit rate per hand, weaker/stronger ratio | Comparing the two sides is a meaningful way to track recovery | **find** (inter-limb asymmetry or bilateral training) | find | |
 | Dial | rotate to a target and hold | Forearm rotation is a core task | Morrey et al. | lead | |
 | Adaptive difficulty | tempo, band width, speed adapt to performance | Adapting difficulty to performance suits rehab games | Afyouni et al. (adaptive game loop) | lead | |

@@ -107,3 +107,32 @@ def test_a_fast_ball_does_not_tunnel_through_the_paddle():
     g.vx, g.vy = 0.0, 320.0
     events = g.step(0.2, g.paddle_x)                # one coarse 200 ms frame
     assert "paddle" in events and "lost" not in events
+
+
+def test_with_a_serve_delay_the_ball_rides_the_paddle_first():
+    g = Breakout(serve_delay=0.8)
+    start_y = g.ball_y
+    for _ in range(10):                               # 0.5 s of play at 50 steps a second
+        events = g.step(0.05, 100.0)
+        assert events == []
+    assert g.ball_x == pytest.approx(g.paddle_x)       # moved with the paddle
+    assert g.ball_y == pytest.approx(start_y)          # has not left it
+
+
+def test_the_ball_launches_when_the_delay_ends():
+    g = Breakout(serve_delay=0.5)
+    for _ in range(12):
+        g.step(0.05, g.paddle_x)
+    assert g.serve_left == 0.0 and g.ball_y < g.paddle_y - 8   # it has gone up
+
+
+def test_every_drop_starts_a_new_serve_delay():
+    g = Breakout(serve_delay=0.6)
+    g.serve_left = 0.0
+    g.ball_x, g.ball_y, g.vx, g.vy = 10.0, g.height + 50, 0.0, 100.0
+    g.step(0.02, g.width - 100)
+    assert g.drops == 1 and g.serve_left == pytest.approx(0.6)
+
+
+def test_no_serve_delay_by_default():
+    assert Breakout().serve_left == 0.0

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import tkinter as tk
 
-from .catch_game import FIELD, GameApp, build_game_args
+from .game_base import FIELD, GameApp, build_game_args
 from .cli import parse_roles, resolve_ports
 from .dial import DialRound, needle_end
 from .mapping_demo import DIM, FG, PANEL, blend

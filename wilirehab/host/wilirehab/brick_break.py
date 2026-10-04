@@ -1,15 +1,18 @@
 """Brick Break: a ball bounces off a paddle and breaks a wall of bricks.
 
-The paddle moves left and right by tilting the OG. By default that is **pitch**
-(tilt forward and back; with the forearm resting flat this is wrist flexion and
-extension), so it trains a different movement from the catch game and the dial,
-which use roll (forearm rotation). `--movement roll` switches it to roll.
+The paddle moves left and right by tilting the OG sideways (**roll**, forearm rotation),
+the natural movement for left and right. `--movement pitch` steers by tilting it forward
+and back instead (wrist flexion and extension). It defaulted to pitch at first; a recorded
+session showed people tilt sideways, and pitch then moved against them about a third of
+the time.
 
-Built on the catch game (screens, legend, pause / pain / summary flow, OG links,
+Built on game_base (screens, legend, pause / pain / summary flow, OG links,
 data table, numbers-only log). Only the play area differs.
 
-Controls: tilt the driver OG. yellow / blue (keys 2 / 4) also move the paddle
-without an OG. z sets neutral; l / r set your own tilt range, as in the catch game.
+Controls: tilt the driver OG. yellow / blue (keys 2 / 4) also move the paddle without an OG.
+The range of tilt you can manage is learned as you play and stretched over the whole field,
+so a small or one-sided range still reaches both edges (key z starts the learning again;
+--fixed-range gives the old fixed mapping, set with l and r).
 Gray "Pain now" slows the ball.
 
 The ball slows after a drop and speeds up each time the wall is cleared.
@@ -23,8 +26,9 @@ from __future__ import annotations
 
 import tkinter as tk
 
+from .autorange import AutoRange
 from .breakout import MIN_SPEED, Breakout
-from .catch_game import FIELD, TILT_SLEW, GameApp, build_game_args
+from .game_base import FIELD, TILT_SLEW, GameApp, build_game_args
 from .cli import parse_roles, resolve_ports
 from .mapping_demo import DIM, FG, PANEL, blend
 from .tilt import to_position
@@ -40,9 +44,10 @@ class BrickApp(GameApp):
     PERF = ("Paddle catch rate", "%", 100.0, 2.0, True)
 
     def __init__(self, root: tk.Tk, ports: dict, log_dir, axis="y", invert_roles=(),
-                 invert_fwd_roles=(), driver="right_hand", movement="pitch",
-                 range_deg=18.0, speed=170.0):
+                 invert_fwd_roles=(), driver="right_hand", movement="roll",
+                 range_deg=18.0, speed=170.0, fixed_range=False):
         self.movement = movement
+        self._fixed_range = fixed_range
         self._start_speed = speed
         super().__init__(root, ports, log_dir, tilt=False, axis=axis,
                          invert_roles=invert_roles, range_deg=range_deg, driver=driver,
@@ -52,12 +57,15 @@ class BrickApp(GameApp):
 
     def _new_round(self) -> None:
         super()._new_round()
-        self.game = Breakout(speed=self._start_speed)
+        # The ball waits on the paddle for 0.8 s before every serve, so a new ball does not
+        # launch the instant the last one drops.
+        self.game = Breakout(speed=self._start_speed, serve_delay=0.8)
+        self.autorange = AutoRange()
         self.paddle_hits = 0
 
     def _end_fields(self) -> dict:
         return {"bricks": self.game.score, "drops": self.game.drops,
-                "levels": self.game.levels}
+                "levels": self.game.levels, "range_deg": round(self.autorange.span, 1)}
 
     # ---- input ---------------------------------------------------------
 
@@ -67,6 +75,12 @@ class BrickApp(GameApp):
         return source.get(self.driver)
 
     def _on_key(self, event) -> None:
+        if event.char == "z":
+            self.autorange.reset()            # learn the range again from this pose
+        if event.char in ("l", "r") and not self._fixed_range:
+            self.status.configure(text="The range is learned as you play. Use --fixed-range "
+                                       "if you want to set it with l and r.")
+            return
         if event.char in ("l", "r"):
             angle = self._angle()
             if angle is None:
@@ -88,7 +102,10 @@ class BrickApp(GameApp):
         self.play_seconds += dt
         angle = self._angle()
         if angle is not None:                # with an OG the tilt sets the paddle
-            target = to_position(angle, self.left_deg, self.right_deg)
+            if self._fixed_range:
+                target = to_position(angle, self.left_deg, self.right_deg)
+            else:                            # learned: the person's own range fills the field
+                target = self.autorange.update(angle, dt)
             step = TILT_SLEW * dt
             self.bx += max(-step, min(step, target - self.bx))
         # (without an OG, the base class's Left / Right presses move self.bx)
@@ -130,7 +147,9 @@ class BrickApp(GameApp):
                       y0 + g.ball_y + r, fill=shade(BALL), outline="", tags="body")
         c.create_text(x0 + 8, y0 + 4, anchor="nw", fill=DIM, font=("Segoe UI", 10),
                       text=f"Bricks {g.score}   Drops {g.drops}   Level {g.levels + 1}   "
-                           f"Steer: {MOVEMENT_NAME[self.movement]}", tags="body")
+                           f"Steer: {MOVEMENT_NAME[self.movement]}"
+                           + ("" if self._fixed_range or not self.autorange.span
+                              else f"   Range {self.autorange.span:.0f} deg"), tags="body")
         if self.screen.key == "paused":
             c.create_text((x0 + x1) / 2, (y0 + y1) / 2, text="PAUSED", fill=FG,
                           font=("Segoe UI", 34, "bold"), tags="body")
@@ -148,10 +167,13 @@ class BrickApp(GameApp):
 
 def main() -> None:
     ap = build_game_args("WiliRehab brick break")
-    ap.add_argument("--movement", choices=("pitch", "roll"), default="pitch",
-                    help="pitch = wrist up/down moves the paddle (default); roll = forearm rotation")
+    ap.add_argument("--movement", choices=("roll", "pitch"), default="roll",
+                    help="roll = tilt the OG sideways (default); pitch = tilt it forward and back")
+    ap.add_argument("--fixed-range", action="store_true",
+                    help="use a fixed tilt range (--range-deg each way, l and r to set) instead "
+                         "of learning yours as you play")
     ap.add_argument("--range-deg", type=float, default=18.0,
-                    help="tilt that reaches each edge (default 18; larger = steadier paddle)")
+                    help="with --fixed-range: the tilt that reaches each edge (default 18)")
     ap.add_argument("--speed", type=float, default=170.0, help="starting ball speed, px/s")
     args = ap.parse_args()
     ports = resolve_ports(args)
@@ -159,7 +181,8 @@ def main() -> None:
     BrickApp(root, ports, args.log_dir, axis=args.axis,
              invert_roles=parse_roles(args.invert_roles),
              invert_fwd_roles=parse_roles(args.invert_fwd_roles), driver=args.driver,
-             movement=args.movement, range_deg=args.range_deg, speed=args.speed)
+             movement=args.movement, range_deg=args.range_deg, speed=args.speed,
+             fixed_range=args.fixed_range)
     root.mainloop()
 
 

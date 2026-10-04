@@ -1,0 +1,4 @@
+{"t": 1791087822.008, "kind": "dial_complete", "target": -35.0, "took_s": 3.7, "tolerance": 9.0}
+{"t": 1791087824.566, "kind": "dial_complete", "target": -25.0, "took_s": 2.6, "tolerance": 8.0}
+{"t": 1791087826.937, "kind": "dial_complete", "target": -15.0, "took_s": 2.4, "tolerance": 7.0}
+{"t": 1791087829.339, "kind": "dial_complete", "target": -5.0, "took_s": 2.4, "tolerance": 6.0}

@@ -1,0 +1,2 @@
+{"t": 1791087808.32, "kind": "hold_timeout", "tx": -6, "ty": -1, "tolerance": 8.0}
+{"t": 1791087812.69, "kind": "hold_complete", "tx": 4, "ty": 3, "mean_dist_deg": 4.86, "tolerance": 7.0}

@@ -1,6 +1,6 @@
 """Rhythm Flick: arrows fall on the beat, flick the wrist that way as one lands.
 
-Built on the catch game (same screens, legend, pause / pain / summary flow,
+Built on game_base (same screens, legend, pause / pain / summary flow,
 OG links, data table and numbers-only log). Only the play area differs.
 
 With two OGs (one per hand) each arrow is marked L or R and falls in that
@@ -12,7 +12,7 @@ Input, any of:
     OG tilt flick   (OGs connected; wear or hold them, flick)
     yellow / blue   OG buttons or keys 2 / 4  = flick left / right (any hand)
     keys u / d      flick up / down (testing without the OG)
-Gray "Pain now" slows the tempo, as in the catch game.
+Gray "Pain now" slows the tempo.
 
 Tempo adapts: 8 hits in a row = +5 BPM, 3 misses in a row = -5 BPM.
 Hits are judged against the laptop clock when the flick arrives, so USB adds a
@@ -31,7 +31,7 @@ import time
 import tkinter as tk
 
 from .bilateral import LEFT, RIGHT
-from .catch_game import FIELD, GameApp, build_game_args
+from .game_base import FIELD, GameApp, build_game_args
 from .cli import parse_roles, resolve_ports
 from .flick import FlickDetector, match_flick
 from .mapping_demo import DIM, FG, PANEL, W, blend
