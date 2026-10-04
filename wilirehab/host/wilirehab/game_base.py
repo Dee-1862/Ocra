@@ -139,6 +139,9 @@ class GameApp(App):
         self.tilt_mode = tilt
         self._stream = tilt if stream is None else stream
         self.links: dict = {}
+        self._shared_link = cli.SHELL["link"]      # the OG shell's link, or None
+        self._on_exit = cli.SHELL["on_exit"]
+        self._dead = False                         # set by _close; stops every timer
         self._new_round()
         self.last_pain = None
         self.left_deg = range_deg       # full-left and full-right tilt; press l / r to set
@@ -163,10 +166,15 @@ class GameApp(App):
         if face_on:
             self._start_face(cli.FACE["camera"], cli.FACE["rest_s"])
         root.after(100, self._poll_face)
-        root.after(300, self._tick_og_screen)
+        if self._shared_link is None:            # under the shell the whole screen is a picture
+            root.after(300, self._tick_og_screen)
         for role, port in ports.items():
-            link = OgLink(port, self.events, role=role,
-                          on_connect=("STREAM 50",) if self._stream else ())
+            on_connect = ("STREAM 50",) if self._stream else ()
+            if self._shared_link is not None:
+                self._shared_link.attach(self.events, role, on_connect)
+                self.links[role] = self._shared_link
+                continue
+            link = OgLink(port, self.events, role=role, on_connect=on_connect)
             link.start()
             self.links[role] = link
         self._go("play")
@@ -218,6 +226,8 @@ class GameApp(App):
         self._face_thread.start()
 
     def _poll_face(self) -> None:
+        if self._dead:
+            return
         try:
             while True:
                 kind, value = self._face_q.get_nowait()
@@ -242,6 +252,8 @@ class GameApp(App):
 
     def _tick_og_screen(self) -> None:
         """Keep each connected OG showing the game name and live data."""
+        if self._dead:
+            return
         try:
             summary = self._summary_lines() if self.screen.key == "summary" else ()
             for role, link in self.links.items():
@@ -264,16 +276,27 @@ class GameApp(App):
         self.root.after(250, self._tick_og_screen)
 
     def _close(self) -> None:
+        if self._dead:
+            return
+        self._dead = True
+        self.anims.clear()
         for writer in self._og_writers.values():
             writer.idle()
         self._face_stop.set()
         if self._face_thread is not None:
             self._face_thread.join(timeout=2.0)
         for link in self.links.values():
-            link.close()
+            if self._shared_link is not None:
+                link.detach()                   # the shell keeps the port
+            else:
+                link.close()
         self.session.close()
         self.data.close()
+        if self._on_exit is not None:
+            _cancel_pending(self.root)          # else Tk pops an error box for each timer
         self.root.destroy()
+        if self._on_exit is not None:
+            self._on_exit()
 
     def press(self, button: str, source: str) -> None:
         # source is "click", "key", or "OG:<role>" for a real button.
@@ -298,6 +321,8 @@ class GameApp(App):
     # ---- input from the OGs ------------------------------------------
 
     def _poll(self) -> None:
+        if self._dead:
+            return
         try:
             while True:
                 kind, value, role = self.events.get_nowait()
@@ -440,6 +465,11 @@ class GameApp(App):
             self._new_round()
             self._go("play")
             return
+        if key == "summary" and label == "Back" and self._on_exit is not None:
+            # Under the OG shell, red goes back to its menu. A moment later, so the
+            # press ring finishes drawing on a window that still exists.
+            self.root.after(200, self._close)
+            return
 
         target = NEXT.get((key, label))
         if target:
@@ -489,6 +519,8 @@ class GameApp(App):
     # ---- the game ----------------------------------------------------
 
     def _game_tick(self) -> None:
+        if self._dead:
+            return
         now = time.monotonic()
         dt = min(0.1, now - self._last)
         self._last = now
@@ -604,6 +636,24 @@ class GameApp(App):
 
 def _round(v):
     return None if v is None else round(v, 2)
+
+
+def _cancel_pending(widget) -> None:
+    """Cancel the `after` timers that belong to `widget` and everything inside it.
+
+    Tk timers outlive the window that made them; when one fires after its window is
+    destroyed, Tk shows an 'invalid command name' error box. The shell closes game
+    windows while it keeps running, so it must cancel them first."""
+    mine, stack = set(), [widget]
+    while stack:
+        w = stack.pop()
+        mine.update(getattr(w, "_tclCommands", None) or ())
+        stack.extend(w.winfo_children())
+    tk_ = widget.tk
+    for after_id in tk_.splitlist(tk_.call("after", "info")):
+        script = tk_.splitlist(tk_.call("after", "info", after_id))[0]
+        if script in mine:
+            widget.after_cancel(after_id)
 
 
 def build_game_args(description: str):

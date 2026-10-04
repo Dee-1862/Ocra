@@ -71,6 +71,55 @@ int main(void) {
     m = parse("STREAM", b, sizeof b);
     ASSERT_EQ(m.cmd, REHAB_CMD_ERROR);
 
+    m = parse("IMG 10 20 100 30", b, sizeof b);
+    ASSERT_EQ(m.cmd, REHAB_CMD_IMG);
+    ASSERT_EQ(m.x, 10);
+    ASSERT_EQ(m.y, 20);
+    ASSERT_EQ(m.w, 100);
+    ASSERT_EQ(m.h, 30);
+    m = parse("IMG 0 0 320 48", b, sizeof b);        /* the largest allowed: a full-width band */
+    ASSERT_EQ(m.cmd, REHAB_CMD_IMG);
+    m = parse("IMG 0 0 320 49", b, sizeof b);        /* one row too many for the buffer */
+    ASSERT_EQ(m.cmd, REHAB_CMD_ERROR);
+    m = parse("IMG 0 0 321 1", b, sizeof b);         /* wider than the panel */
+    ASSERT_EQ(m.cmd, REHAB_CMD_ERROR);
+    m = parse("IMG 300 0 21 1", b, sizeof b);        /* runs off the right edge */
+    ASSERT_EQ(m.cmd, REHAB_CMD_ERROR);
+    m = parse("IMG 0 230 10 11", b, sizeof b);       /* runs off the bottom */
+    ASSERT_EQ(m.cmd, REHAB_CMD_ERROR);
+    m = parse("IMG 0 0 0 10", b, sizeof b);          /* an empty picture */
+    ASSERT_EQ(m.cmd, REHAB_CMD_ERROR);
+    m = parse("IMG 0 0 10", b, sizeof b);            /* missing a field */
+    ASSERT_EQ(m.cmd, REHAB_CMD_ERROR);
+    m = parse("IMG 0 0 99999999999 1", b, sizeof b); /* must not wrap */
+    ASSERT_EQ(m.cmd, REHAB_CMD_ERROR);
+
+    m = parse("BRIGHT 40", b, sizeof b);
+    ASSERT_EQ(m.cmd, REHAB_CMD_BRIGHT);
+    ASSERT_EQ(m.pct, 40);
+    m = parse("BRIGHT 101", b, sizeof b);
+    ASSERT_EQ(m.cmd, REHAB_CMD_ERROR);
+    m = parse("BRIGHT", b, sizeof b);
+    ASSERT_EQ(m.cmd, REHAB_CMD_ERROR);
+
+    m = parse("BEEP 1500 40 6", b, sizeof b);
+    ASSERT_EQ(m.cmd, REHAB_CMD_BEEP);
+    ASSERT_EQ(m.hz, 1500);
+    ASSERT_EQ(m.ms, 40);
+    ASSERT_EQ(m.vol, 6);
+    m = parse("BEEP 99 40 6", b, sizeof b);          /* below 100 Hz */
+    ASSERT_EQ(m.cmd, REHAB_CMD_ERROR);
+    m = parse("BEEP 4001 40 6", b, sizeof b);
+    ASSERT_EQ(m.cmd, REHAB_CMD_ERROR);
+    m = parse("BEEP 1000 0 6", b, sizeof b);         /* no length */
+    ASSERT_EQ(m.cmd, REHAB_CMD_ERROR);
+    m = parse("BEEP 1000 301 6", b, sizeof b);       /* longer than the buffer */
+    ASSERT_EQ(m.cmd, REHAB_CMD_ERROR);
+    m = parse("BEEP 1000 40 11", b, sizeof b);
+    ASSERT_EQ(m.cmd, REHAB_CMD_ERROR);
+    m = parse("BEEP 1000 40", b, sizeof b);          /* missing the volume */
+    ASSERT_EQ(m.cmd, REHAB_CMD_ERROR);
+
     m = parse("FROB", b, sizeof b);
     ASSERT_EQ(m.cmd, REHAB_CMD_ERROR);
 

@@ -168,7 +168,7 @@ class BrickApp(GameApp):
         ]
 
 
-def main() -> None:
+def parser():
     ap = build_game_args("WiliRehab brick break")
     ap.add_argument("--movement", choices=("roll", "pitch"), default="roll",
                     help="roll = tilt the OG sideways (default); pitch = tilt it forward and back")
@@ -178,14 +178,23 @@ def main() -> None:
     ap.add_argument("--range-deg", type=float, default=18.0,
                     help="with --fixed-range: the tilt that reaches each edge (default 18)")
     ap.add_argument("--speed", type=float, default=170.0, help="starting ball speed, px/s")
-    args = ap.parse_args()
+    return ap
+
+
+def build(root, ports: dict, args) -> BrickApp:
+    """The game in `root` (a Tk or Toplevel). The OG shell calls this with default arguments."""
+    return BrickApp(root, ports, args.log_dir, axis=args.axis,
+                    invert_roles=parse_roles(args.invert_roles),
+                    invert_fwd_roles=parse_roles(args.invert_fwd_roles), driver=args.driver,
+                    movement=args.movement, range_deg=args.range_deg, speed=args.speed,
+                    fixed_range=args.fixed_range)
+
+
+def main() -> None:
+    args = parser().parse_args()
     ports = resolve_ports(args)
     root = tk.Tk()
-    BrickApp(root, ports, args.log_dir, axis=args.axis,
-             invert_roles=parse_roles(args.invert_roles),
-             invert_fwd_roles=parse_roles(args.invert_fwd_roles), driver=args.driver,
-             movement=args.movement, range_deg=args.range_deg, speed=args.speed,
-             fixed_range=args.fixed_range)
+    build(root, ports, args)
     root.mainloop()
 
 

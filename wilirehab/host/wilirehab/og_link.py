@@ -52,7 +52,9 @@ class OgLink:
         self.role = role
         self.on_connect = tuple(on_connect)   # command lines sent once connected
         self._ser = None
+        self._home = None                # (events, role) to return to after attach()
         self._stop = threading.Event()
+        self._wlock = threading.Lock()   # one writer at a time: a picture must not be split
 
     def _put(self, kind, value) -> None:
         self.events.put((kind, value, self.role))
@@ -71,9 +73,36 @@ class OgLink:
             self._put("status", "Not connected yet; command not sent")
             return
         try:
-            ser.write((line + "\n").encode("ascii"))
+            with self._wlock:
+                ser.write((line + "\n").encode("ascii"))
         except Exception as exc:
             self._put("status", f"Send failed: {exc}")
+
+    def send_raw(self, data: bytes) -> None:
+        """Write bytes as they are (a picture command and its pixels). Raises on failure."""
+        ser = self._ser
+        if ser is None:
+            raise OSError("OG not connected")
+        with self._wlock:
+            ser.write(data)
+
+    def attach(self, events: queue.Queue, role: str, on_connect=()) -> None:
+        """Lend this link to a game: its events go to the game's queue, and its startup
+        commands are sent now (and again if the link is still connecting)."""
+        self._home = (self.events, self.role)
+        self.events, self.role = events, role
+        self.on_connect = tuple(on_connect)
+        if self.connected:
+            for line in self.on_connect:
+                self.send(line)
+
+    def detach(self) -> None:
+        """Take the link back: stop any stream and send events to the original queue again."""
+        self.send("STREAM 0")
+        self.on_connect = ()
+        if self._home is not None:
+            self.events, self.role = self._home
+            self._home = None
 
     def close(self) -> None:
         """Ask the OG to stop streaming, then stop the reader."""

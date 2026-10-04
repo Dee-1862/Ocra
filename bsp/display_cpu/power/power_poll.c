@@ -25,6 +25,12 @@ static bool    s_led_saved_valid;
 #define FWOG_SHIP_RENDER_MS 50u
 static uint32_t s_next_render_ms;
 
+/* Nothing is lit until the hold is this far through (percent of the 6 s, so 10 is
+   0.6 s). Without this, an ordinary tap on red flashed the first LED, because the
+   countdown is drawn the instant the button goes down. The hold itself and its
+   timing are untouched; only the first 0.6 s of it are unlit. */
+#define FWOG_SHIP_SHOW_PCT 10u
+
 /* 0..100 as a filling red bar, ALWAYS at least one pixel. An operator needs
  * to see that the hold registered, and "no LEDs yet" is indistinguishable
  * from "the button did nothing" -- so a plain proportional map is wrong here:
@@ -76,10 +82,11 @@ fwog_power_t fwog_power_poll(uint32_t now_ms) {
         }
         /* Signed-difference wrap comparison, the same idiom the rest of this
            tree uses for uint32_t millisecond deadlines. */
-        if (s_ship.phase != FWOG_SHIP_IDLE &&
+        const unsigned progress = fwog_ship_progress(&s_ship, now_ms);
+        if (s_ship.phase != FWOG_SHIP_IDLE && progress >= FWOG_SHIP_SHOW_PCT &&
             (int32_t)(now_ms - s_next_render_ms) >= 0) {
             s_next_render_ms = now_ms + FWOG_SHIP_RENDER_MS;
-            ship_render(fwog_ship_progress(&s_ship, now_ms));
+            ship_render(progress);
         }
     }
 

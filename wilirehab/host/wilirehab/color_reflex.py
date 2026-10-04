@@ -208,14 +208,22 @@ class ReflexApp(GameApp):
         ]
 
 
+def parser():
+    return build_game_args("WiliRehab colour reflex")
+
+
+def build(root, ports: dict, args) -> ReflexApp:
+    """The game in `root` (a Tk or Toplevel). The OG shell calls this with default arguments."""
+    return ReflexApp(root, ports, args.log_dir, axis=args.axis,
+                     invert_roles=parse_roles(args.invert_roles),
+                     invert_fwd_roles=parse_roles(args.invert_fwd_roles), driver=args.driver)
+
+
 def main() -> None:
-    ap = build_game_args("WiliRehab colour reflex")
-    args = ap.parse_args()
+    args = parser().parse_args()
     ports = resolve_ports(args)
     root = tk.Tk()
-    ReflexApp(root, ports, args.log_dir, axis=args.axis,
-              invert_roles=parse_roles(args.invert_roles),
-              invert_fwd_roles=parse_roles(args.invert_fwd_roles), driver=args.driver)
+    build(root, ports, args)
     root.mainloop()
 
 

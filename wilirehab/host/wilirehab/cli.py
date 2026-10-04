@@ -21,6 +21,11 @@ from .devices import (DEFAULT_CONFIG, ROLES, assign_roles, find_og_displays,
 # the webcam is the one option all of them share.
 FACE = {"camera": None, "rest_s": 10.0}
 
+# Set by og_shell while it runs a game inside its own process: the shell owns the OG's
+# serial port, so the game borrows the shell's OgLink instead of opening the port again,
+# and calls on_exit() after it closes. Both None when a game runs on its own.
+SHELL = {"link": None, "on_exit": None}
+
 
 class _FaceAction(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):

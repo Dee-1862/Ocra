@@ -149,17 +149,26 @@ class DialApp(GameApp):
         ]
 
 
-def main() -> None:
+def parser():
     ap = build_game_args("WiliRehab dial")
     ap.add_argument("--dial-range", type=float, default=45.0,
                     help="roll angle at each end of the dial in degrees (default 45)")
-    args = ap.parse_args()
+    return ap
+
+
+def build(root, ports: dict, args) -> DialApp:
+    """The game in `root` (a Tk or Toplevel). The OG shell calls this with default arguments."""
+    return DialApp(root, ports, args.log_dir, axis=args.axis,
+                   invert_roles=parse_roles(args.invert_roles), driver=args.driver,
+                   dial_range=args.dial_range,
+                   invert_fwd_roles=parse_roles(args.invert_fwd_roles))
+
+
+def main() -> None:
+    args = parser().parse_args()
     ports = resolve_ports(args)
     root = tk.Tk()
-    DialApp(root, ports, args.log_dir, axis=args.axis,
-            invert_roles=parse_roles(args.invert_roles), driver=args.driver,
-            dial_range=args.dial_range,
-            invert_fwd_roles=parse_roles(args.invert_fwd_roles))
+    build(root, ports, args)
     root.mainloop()
 
 

@@ -68,11 +68,52 @@ void rehab_parse(char *line, rehab_msg_t *out) {
         return;
     }
 
+    if (strcmp(verb, "IMG") == 0) {
+        unsigned x, y, w, h;
+        if (!parse_uint(token(&rest), REHAB_SCREEN_W - 1u, &x) ||
+            !parse_uint(token(&rest), REHAB_SCREEN_H - 1u, &y) ||
+            !parse_uint(token(&rest), REHAB_SCREEN_W, &w) ||
+            !parse_uint(token(&rest), REHAB_SCREEN_H, &h)) {
+            fail(out, "bad-image");
+            return;
+        }
+        /* Written so none of it can wrap: the limits above bound every term. */
+        if (w == 0u || h == 0u || x + w > REHAB_SCREEN_W || y + h > REHAB_SCREEN_H ||
+            w * h > REHAB_IMG_MAX_PIXELS) {
+            fail(out, "bad-image");
+            return;
+        }
+        out->cmd = REHAB_CMD_IMG;
+        out->x = x; out->y = y; out->w = w; out->h = h;
+        return;
+    }
+
     if (strcmp(verb, "STREAM") == 0) {
         unsigned hz;
         if (!parse_uint(token(&rest), 100u, &hz)) { fail(out, "bad-rate"); return; }
         out->cmd = REHAB_CMD_STREAM;
         out->hz  = hz;
+        return;
+    }
+
+    if (strcmp(verb, "BRIGHT") == 0) {
+        unsigned pct;
+        if (!parse_uint(token(&rest), 100u, &pct)) { fail(out, "bad-percent"); return; }
+        out->cmd = REHAB_CMD_BRIGHT;
+        out->pct = pct;
+        return;
+    }
+
+    if (strcmp(verb, "BEEP") == 0) {
+        unsigned hz, ms, vol;
+        if (!parse_uint(token(&rest), 4000u, &hz) || hz < 100u ||
+            !parse_uint(token(&rest), 300u, &ms) || ms < 1u ||
+            !parse_uint(token(&rest), 10u, &vol)) {
+            fail(out, "bad-beep");
+            return;
+        }
+        out->cmd = REHAB_CMD_BEEP;
+        out->hz = hz; out->ms = ms; out->vol = vol;
         return;
     }
 

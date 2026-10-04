@@ -308,6 +308,56 @@ python -m pytest tests/test_pspi.py tests/test_face_strain.py tests/test_hrv.py 
 **If it fails:** paste the first `FAILED` block. `No module named numpy` means the venv is missing numpy (`python -m pip install numpy`). `No module named wilirehab` means the shell is not in `wilirehab/host`.
 **Report:** "Card 24: pass" or the first failure line.
 
+## Card 25: The OG as the screen (menu, games, face view, dark/light, brightness, sound)
+**Needs a rebuild and reflash** (the OG gained `BRIGHT` and `BEEP`, and the red-hold light changed). Do this first, with only the OG plugged in:
+```
+fw build wilirehab_main
+fw flash wilirehab_main
+```
+**Expect:** the build ends without errors, the flash copies, and the OG shows "WiliRehab / waiting for host". **If the build fails:** paste the first `error:` line. Close every other program that has the OG port open (launcher games, the demo, a serial terminal) before step C: only one program can hold it.
+
+**Red button (do this once after flashing):**
+1. Tap red quickly several times: **no LED should light**.
+2. Hold red: nothing for about half a second, then the red bar starts filling. Let go before 6 s: the LEDs go back to how they were.
+3. Hold red for the full 6 s with USB unplugged: the OG powers off (this is the original power-off test, still required).
+**Report:** which of 1-3 behaved differently.
+
+**A. Host tests first (no board):**
+```
+cd wilirehab/host
+python -m pytest tests/test_og_shell_parts.py tests/test_og_display.py tests/test_og_screen.py -q
+```
+**Expect:** all pass. **If it fails:** paste the first `FAILED` block.
+
+**B. Laptop only (no OG):**
+```
+python -m wilirehab.og_shell --no-og
+```
+**Expect:** a window showing the menu. Press `2` or Down arrow: the highlight moves. Press `4`: it flips light/dark. Press `3` on a game: the game opens in its own window; the shell window keeps showing what the OG would show.
+
+**C. With the OG:**
+```
+python -m wilirehab.og_shell
+```
+(or `--port COM11` with the display CPU's port.)
+1. **Menu:** the OG shows the game list in the same style as the laptop. Red = down, gray = up, green = open. Blue switches dark/light. Yellow opens Settings, then yellow goes back.
+2. **Game:** green on Brick Break. The OG should show the game; tilt the OG and the paddle moves on both screens. Note the frame rate you see (smooth, choppy, about N frames a second).
+3. **Leaving:** press `e` (laptop) to end, then play through pain check-in to the summary. Red ("Back") returns to the OG menu. Green ("Done") plays again.
+4. **Face view:** open "Face view" (last row). Your face should appear, mirrored. Yellow goes back and the camera light goes off.
+5. **Light theme in a game:** press blue on the menu to go light, then start a game. The OG shows a light version of the game. It is an approximation (inverted brightness), so say if it looks wrong.
+6. **Close** the shell window: the OG shows "WiliRehab closed on the laptop".
+7. **Brightness:** Settings (yellow), down to Brightness, green. It steps 25, 50, 75, 100 % and the backlight should visibly change. The OG never goes fully dark.
+8. **Sound:** down to Sound, green. It steps off, low, medium, high, with a sample beep each time (silent on off). Then every button press in the menu ticks. If there is never any sound at any level, say so: the boot line `[wilirehab_display] ... audio=ok` can be read from a serial terminal on the OG's port before the shell starts.
+9. **Saved:** close the shell and start it again. Theme, brightness and sound should come back as you left them (they are kept in `wilirehab/host/og_settings.json`).
+10. **A game opens on top:** pressing green on a game should bring up the game window at the top left of the main monitor, in front of VS Code, and the OG should show the game, not your editor.
+
+**Expect problems and what they mean:**
+- OG stays on "waiting for host": the shell did not connect. Read the status line in the shell window (port busy means another program has it).
+- Game mirror shows the wrong picture or black: the game window is covered, minimised or on a second monitor. Keep it on the main monitor, uncovered.
+- OG buttons do nothing in a tilt game while it plays: intended, they are switched off during play and back on at the end screens (Colour Reflex uses them all the time).
+
+**Report:** paste the status line, the frame rate you saw for Brick Break, and anything from 1-6 that did not match.
+
 ## Results log
 | Date | Card | Result | Notes |
 |---|---|---|---|

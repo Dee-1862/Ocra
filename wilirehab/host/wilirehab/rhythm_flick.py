@@ -238,7 +238,7 @@ class RhythmApp(GameApp):
         ]
 
 
-def main() -> None:
+def parser():
     ap = build_game_args("WiliRehab rhythm flick")
     ap.add_argument("--dirs", choices=("lr", "all"), default="all",
                     help="all = left, right, up and down flicks (default); lr = sideways only")
@@ -248,14 +248,23 @@ def main() -> None:
     ap.add_argument("--bpm", type=int, default=START_BPM, help="starting tempo")
     ap.add_argument("--flick-dps", type=float, default=150.0,
                     help="flick speed threshold in degrees per second (lower = easier)")
-    args = ap.parse_args()
+    return ap
+
+
+def build(root, ports: dict, args) -> RhythmApp:
+    """The game in `root` (a Tk or Toplevel). The OG shell calls this with default arguments."""
+    return RhythmApp(root, ports, args.log_dir, axis=args.axis,
+                     invert_roles=parse_roles(args.invert_roles),
+                     invert_fwd_roles=parse_roles(args.invert_fwd_roles), dirs=args.dirs,
+                     bpm=args.bpm, flick_dps=args.flick_dps, hands=args.hands,
+                     driver=args.driver)
+
+
+def main() -> None:
+    args = parser().parse_args()
     ports = resolve_ports(args)
     root = tk.Tk()
-    RhythmApp(root, ports, args.log_dir, axis=args.axis,
-              invert_roles=parse_roles(args.invert_roles),
-              invert_fwd_roles=parse_roles(args.invert_fwd_roles), dirs=args.dirs,
-              bpm=args.bpm, flick_dps=args.flick_dps, hands=args.hands,
-              driver=args.driver)
+    build(root, ports, args)
     root.mainloop()
 
 
