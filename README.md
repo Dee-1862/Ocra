@@ -1,145 +1,228 @@
-# wiliOGbsp — FreeWili 1 OG Board Support Package
+# Orca
 
-![The FreeWili OG: LCD, five color buttons, seven RGB LEDs and the GPIO header](docs/images/freewili-og.png)
+**Rehab games you play with a pair of worn [FreeWili OG](https://freewili.com) controllers, and four agents that
+filter, check, decide and act on what the sensors report, with every step shown on the device screen.**
+Numbers only are kept: no video or images are ever stored.
 
-Board-support monorepo for the **FreeWili 1 OG**, which carries two RP2040s: a
-display CPU (ST7789 LCD, five color buttons, 7 WS2812 LEDs, IR, PDM mic, I2S
-speaker, I2C sensors) and a main CPU (two CC1101 sub-GHz radios, an iCE40
-FPGA, user breakout I/O). One CMake configure builds both.
+<p align="center">
+  <img src="docs/images/og-menu.png" width="46%" alt="Orca game menu on the OG screen">
+  <img src="docs/images/og-agent-steps.png" width="46%" alt="The agents' steps, one line each">
+</p>
+<p align="center"><sub>The OG's own screens, drawn by this project's code. The agent pages show a
+<b>simulated patient</b>, not a person.</sub></p>
 
-Agents and contributors: read [AGENTS.md](./AGENTS.md) first.
+> **Research prototype.** Thresholds are placeholders and are **not clinically validated**. Everything in the
+> demo uses a **simulated patient**. Orca makes no medical claims and is not medical advice. The games measure
+> comfort and performance, not recovery; showing recovery would need a real study with consent and ethics
+> approval.
 
-**FreeWili 1 OG** is the new name for the FreeWili 1 firmware. It supports
-easy bootloading, open-source hardware, and generating a single UF2 file that
-flashes both CPUs.
+## Why
 
-## Loading what you build — the FreeWili OG App Explorer
+At-home rehabilitation gives clinicians very little to go on. One noisy sensor cannot tell a weak hand from a
+resting one, and a false alert makes people stop trusting the system. Orca turns the repetitive part into games,
+records the numbers a therapist wants (range of motion, tremor, peak speed, reaction time, hit rate, pain
+presses), and puts a chain of agents between the sensors and any conclusion.
 
-**[FreeWili OG App Explorer](https://github.com/freewili/fwOGAppExplorer)**
-loads the apps this BSP builds. Point it at a board and it flashes an
-FwOGapp — the single UF2 that carries both CPUs' firmware — without you
-having to know which CPU is which or how to reach BOOTSEL.
+## How it fits together
 
-That works because the two ends agree by construction. Every app built here
-carries a `fwog_uf2_info_t` record naming its CPU, app name, version and
-description, and a USB identity the host can match; the App Explorer reads
-exactly those. An FwOGapp also powers the device on and off consistently and
-supports automatic bootloading. This BSP is what builds an app the right way,
-so the App Explorer can load it — the rules are enumerated as "The FwOGapp
-contract" in [AGENTS.md](./AGENTS.md).
-
-## Quick start
-
-Prerequisites: Pico SDK 2.3.0 and the arm-none-eabi toolchain under
-`~/.pico-sdk`, plus Python 3 with the packages in `requirements.txt`
-(`python3 -m pip install -r requirements.txt`; on macOS and Linux, do it inside
-a virtual environment). Host tests additionally want MSYS2 MinGW GCC on
-Windows. `fw build` uses the `target` CMake preset on Windows and
-`target-posix` on macOS and Linux; both expect the Raspberry Pi Pico
-extension's layout (`toolchain/15_2_Rel1`, `ninja/v1.13.2`).
-
-```bash
-fw bootloader              # once per board: serial bootloader -> display CPU
-fw build template_main     # build a main-CPU app (carries the display image)
-fw flash template_main     # BOOTSEL that CPU, then it copies the .uf2
-fw console                 # attach to the display bootloader's USB console
-fw test                    # host unit tests, no hardware
+```mermaid
+flowchart LR
+    subgraph Hands["Worn controllers"]
+        L["Left OG<br/>accelerometer, 5 buttons"]
+        R["Right OG<br/>accelerometer, 5 buttons"]
+    end
+    S["Screen OG<br/>menu, game picture, buttons"]
+    C["Webcam<br/>(optional)"]
+    subgraph Laptop["Laptop: does all the work"]
+        G["Games and filters"]
+        A["Four agents<br/>Filter, Check, Decide, Act"]
+    end
+    DB[("Supabase<br/>insert-only")]
+    L -- USB --> G
+    R -- USB --> G
+    C -- "face numbers only" --> G
+    G <-- USB, pictures and buttons --> S
+    G --> A
+    A -- "round summaries" --> DB
 ```
 
-`fw bootloader` is the once-per-board step. After it, display firmware is
-embedded in main's UF2 and arrives over the inter-CPU link automatically —
-one file flashes both CPUs.
+The OGs are deliberately simple terminals: all game logic, filtering and the agents run on the laptop, so the
+display chip has nothing in it that can hang (it has no watchdog).
 
-Two rules worth knowing before you plug anything in:
+## What it does
 
-- Put only **one** CPU in BOOTSEL at a time. Both present the same USB serial,
-  so with two mounted neither the tools nor you can tell which is which.
-- Never `fw flash` a display *application*. It will not boot and it takes the
-  display CPU off USB — the one CPU with no BOOTSEL button. Display apps ride
-  along inside the main CPU's UF2. See [AGENTS.md](./AGENTS.md) for the full
-  reason and the recovery path.
+**Six games**, each built around a different movement. They share the same screens, buttons, pause and pain
+check-in, and the same numbers-only log.
 
-## What's in `apps/`
+| Game | You | Notes |
+|---|---|---|
+| Beat Flick | Flick each falling block the way its arrow points, in time with a built-in song | Red blocks for the left hand, blue for the right. New. |
+| Rhythm Flick | Flick the wrist the way the arrow points as it lands | Tempo adapts to how you do |
+| Steady Hand | Hold a cursor inside a ring, then the next ring | Measures steadiness and tremor |
+| Dial | Roll a needle to a target angle and hold it | Forearm rotation |
+| Brick Break | Tilt to steer a paddle and break a wall of bricks | The range you can reach is learned |
+| Colour Reflex | Press the button whose colour lights up | Buttons only; reaction time |
 
-**One folder per app, with the CPU halves inside it.** A display app and its
-main companion are one deliverable — the main UF2 carries the display image
-inside it — so they live together and share a `CMakeLists.txt`:
+Pause, restart and the readings pages work from the controllers' own five buttons. An optional webcam adds a
+pain-expression score and a pulse, computed on the laptop.
 
+<p align="center">
+  <img src="docs/images/og-menu-light.png" width="31%" alt="The menu in the light theme">
+  <img src="docs/images/og-settings.png" width="31%" alt="Settings: theme, brightness, sound, face numbers">
+  <img src="docs/images/og-agent-detail.png" width="31%" alt="One agent's own page">
+</p>
+<p align="center"><sub>Light theme, Settings, and one agent's own page.</sub></p>
+
+## The agents
+
+| Agent | What it does |
+|---|---|
+| **Filter** | Drops readings that cannot be real (glitches, no face in view). Compares the two hands, and the face against the person's own calm baseline. |
+| **Check** | Fact-checks a possible imbalance four ways: enough data, persists across windows, unusual for *this* person, other signals (face, pain) agree. Gives the evidence for each. |
+| **Decide** | Turns the verdict into a difficulty recommendation with a stated rule. A finding that is not fully verified can never make the game harder, and a verified concern eases it. |
+| **Act** | Saves each round and the clean readings (local queue, then Supabase) and states the recommendation. |
+
+Verdicts: `not enough data`, `balanced`, `noted, not verified`, `watch`, `concerning (verified)`.
+
+## Two sensors standing in for an IMU
+
+The OG has only a 3-axis accelerometer: tilt (roll and pitch), but no heading and no rotation speed. A **BMM350
+3-axis magnetometer**, wired to the OG's I2C header through an Orca module, adds the field direction:
+
+- tilt from gravity (accelerometer) and heading from the magnetic field (magnetometer);
+- a calibration that fits a sphere to a few slow turns, removing the magnetometer's large fixed offset
+  (about 300 microtesla);
+- a classifier that tells **turning the hand** from **sliding it sideways** by subtracting the acceleration that
+  tilt alone would cause.
+
+This is not a true 9-axis IMU. It cannot give position, it cannot see a smooth slide at steady speed, and metal
+or magnets nearby disturb the heading. Try it: `python -m orca.mag_accel_tester`.
+
+## What you need
+
+- **Three FreeWili OGs on USB:** left hand, right hand, and the screen. Set roles with
+  `python -m orca.devices --setup`, or press the gray button on each OG's screen.
+- **A laptop** (Windows tested) with Python 3.12.
+- **Optional:** a webcam, a Supabase project, an Agentverse account, a BMM350 on an Orca module.
+- **Camera note:** the laptop camera or a phone via DroidCam work today. The ESP32-P4-EYE (FreeWili's WILEYE)
+  is not used as a live camera: FreeWili's firmware takes still pictures, not video
+  (see `notebook/camera-options.md`).
+
+## Setup
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install pyserial numpy pillow uagents mediapipe opencv-python pytest
+cd orca\host
+copy .env.example .env      # then fill in your own values (never commit .env)
 ```
-apps/ogvegas/
-    CMakeLists.txt      declares both ogvegas_display and ogvegas_main
-    display/main.c
-    main/main.c
+
+Settings live in `orca/host/.env` (see `.env.example`), named `ORCA_*`: `ORCA_PARTICIPANT`, `ORCA_SEED`
+(gives your agents their identities), `ORCA_WINDOW_S`, `ORCA_SAMPLE_S`, `SUPABASE_URL` and `SUPABASE_KEY` (an
+insert-only key). Create the Supabase tables with `orca/host/supabase_schema.sql`. `.env` is git-ignored: keep
+keys out of code, chats and screenshots.
+
+### OG firmware
+
+From the repository root (not `orca/host`):
+
+```powershell
+python tools\fw.py build orca_main
+python tools\fw.py flash orca_main
 ```
 
-Targets keep their `_display`/`_main` suffix; only the folder drops it. A
-folder with no `main/` has no companion.
+`fw flash` does not build, so build first. Flash **one OG at a time**, with only that one plugged in, and read
+[`AGENTS.md`](../AGENTS.md) first: never `fw flash` a display application by UF2. In PowerShell use
+`python tools\fw.py ...`: a bare `fw` is the built-in `Format-Wide`.
 
-| App         | What it is                                                                       |
-| ----------- | -------------------------------------------------------------------------------- |
-| `template`  | The skeleton `fw new-app` copies. Start here.                                    |
-| `ogvegas`   | Showcase: LCD image, audio replay and an animated LED comet, all at once.        |
-| `lvgl`      | LVGL example — a list you drive with the front-panel buttons. Opt-in, see below. |
-| `bench`     | Console for poking every driver from the host, via `tools/bench.py`.             |
-| `smoke`     | Bare-board bring-up: clocks, USB, the inter-CPU link.                            |
-| `lcd`       | ST7789 panel bring-up on its own.                                                |
-| `bl`        | The display serial bootloader. Flashed once per board.                           |
-| `cpuprobe`  | Answers "which CPU is this?" on a board where you cannot tell.                   |
+## Run it
 
-### LVGL
+From `orca/host`, with the venv active:
 
-The BSP ships an **LVGL 9 port** — the ST7789 as an LVGL display, and the five
-buttons as an LVGL keypad — in `bsp/display_cpu/lvgl/`.
-
-**LVGL itself is not vendored here.** Your project supplies it and the BSP
-builds `fwog_display_lvgl` against it, the same arrangement it has with the
-Pico SDK. To try the example without wiring that up yourself, let this repo
-fetch LVGL for you:
-
-```bash
-cmake --preset target -DFWOG_LVGL_FETCH=ON   # target-posix on macOS/Linux
-cmake --build build --target lvgl_main
-fw flash lvgl_main
+```powershell
+python -m orca.devices --setup                        # once: which OG is screen, left, right
+python -m orca.og_shell                               # the menu and games, mirrored to the screen OG
+python -m orca.beat_flick --devices devices.json      # one game on its own, two controllers
+python -m orca.live_face --camera 0 --show            # check the camera sees you (q quits)
 ```
 
-Budget for it: roughly **390 KB of flash and 143 KB of RAM** of the RP2040's
-264 KB, against ~32 KB for a bare display app. That is why it is opt-in.
+To start the whole demo in one go (agents and the OG shell, as the simulated participant):
+`powershell -ExecutionPolicy Bypass -File .\start_demo.ps1`, with `-Simulated` to also play the simulated
+patient, or `-Agentverse` for the four Agentverse agents.
 
-## Status
+Add `--face` (or `--face 1` for a second camera) to a game for the face numbers, and `--no-sound` to play Beat
+Flick without the song. Only one program can open a camera or an OG's port at a time.
 
-The foundation, the display serial bootloader and its update path are
-complete, and most peripheral drivers are implemented and have been exercised
-on hardware.
+The agents:
 
-| Area                                                  | State                                                               |
-| ----------------------------------------------------- | ------------------------------------------------------------------- |
-| Clocks, link, diagnostics, bootloader, display update | Working, verified on hardware                                       |
-| LCD (ST7789), buttons, WS2812 LEDs, ship mode         | Working, verified on hardware                                       |
-| CC1101 radios ×2, IR TX/RX, PDM mic, I2S speaker      | Working, verified on hardware                                       |
-| LIS3DH accelerometer, MCP7940 RTC, PCAL6416 expander  | Working, verified on hardware                                       |
-| iCE40 FPGA loader                                     | Bitstream loads and `CDONE` asserts; no gateware function exercised |
-| LVGL 9 port (display + keypad)                        | Builds and links against LVGL v9.2.2; **not yet run on a board**     |
-| Breakout I/O direction control                        | Code complete and host-tested, but **never run on a board**          |
+```powershell
+python -m orca.agents_main       # the four agents in one program: private, offline (default)
+python -m orca.agent_stage       # the four agents as separate Agentverse agents (simulated data only)
+python -m orca.demo_data         # a SIMULATED patient played through the real agents
+python -m orca.agent_gateway     # one agent that answers ASI:One questions about the chain
+```
 
-Known gaps: crash-safety under power loss mid-update, ship-mode current draw
-(nothing on the board can measure it), the FPGA's gateware behaviour, the
-breakout I/O direction sequencer, and the LVGL port.
+`agent_stage` starts Filter, Check, Decide and Act on ports 8101 to 8104, each with its own mailbox. Connect each
+in the Agentverse Inspector once (Connect, then Mailbox). Only run one of `agents_main`, `agent_stage` or the
+gateway at a time per port.
 
-## License
+## The simulated patient
 
-**Dual licensed** — see [LICENSE](./LICENSE) and [NOTICE](./NOTICE).
+`demo_data` plays seven sessions over two weeks (noted x4, watch, concerning, recovered) through the real agents,
+so the verdicts shown are produced by the pipeline. It refuses to run unless the participant code starts with
+`DEMO`, so it cannot be mixed into a real person's record. Anything recorded from it must say **simulated
+patient**. The pictures in this README come from `docs/make_images.py`, which draws sample data the same way.
 
-| What you're building                      | License                                                                                    |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Firmware targeting **FreeWili hardware**  | FreeWili Hardware License — MIT text plus a field-of-use condition. Free, no registration. |
-| Firmware targeting **any other hardware** | Commercial license required; contact [Intrepid Control Systems](https://intrepidcs.com/).  |
+## Tests
 
-The free option is **not** the MIT License and **not** open source: it is MIT's
-text with a hardware field-of-use condition added. Please don't describe it as
-either.
+The pure logic (filters, flick detection, maps and scoring, button maps, protocol parsing, the agents' rules) is
+tested with no hardware. From `orca/host`:
 
-Bundled third-party components (FatFs, the wilibsp-derived CIC filter, the Pico
-SDK board header, and the LVGL-derived `lv_conf.h`) keep their own more
-permissive licenses and are **not** subject to the hardware condition — see
-[THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md). LVGL itself is not
-distributed here.
+```powershell
+python -m pytest tests -q
+```
+
+The firmware's line-protocol parser has its own C test (`tests/test_rehab_proto.c`, run by `fw test`). Hardware
+steps (flashing, the 6-second red-hold power-off, sound, cameras) are checked by hand: the cards are in
+`notebook/manual-tests.md`.
+
+## Troubleshooting
+
+| Symptom | Likely cause and fix |
+|---|---|
+| The OG stays on "waiting for host" | Nothing has opened its port. Start `og_shell` or a game. |
+| "could not open port" / access denied | Another program holds it (an old shell, a terminal). Close it, or unplug and replug. |
+| "N OGs are plugged in: say which is which hand" | Run `python -m orca.devices --setup`, then pass `--devices devices.json`. |
+| Cameras 0 and 1 are both the laptop | A laptop camera often shows twice (colour and infrared). Preview each with `live_face --show`. |
+| A phone appears as camera 1 | That is DroidCam, a virtual camera. Windows does not list it as a device. |
+| OG buttons do nothing | Test the OG alone: `python -m serial.tools.miniterm COMxx 115200` and look for `BTN ... down`. Then check what is attached to its header. |
+| Camera board will not turn on | It has its own power switch ("I" is on) and needs its own USB-C or a battery; the OG does not power it. |
+| `fw` is "not recognized" or runs `Format-Wide` | Use `python tools\fw.py ...` from the repository root. |
+
+## Known limits
+
+- One accelerometer per OG gives tilt only: no position, and no gyroscope.
+- Thresholds in `skills.py` are placeholders, not validated.
+- Heart rate from video needs clean, steady frames; compressed or uneven video can degrade it.
+- Beat Flick's song and map are made in code; its audio sync and sound are untested on a Pi.
+- No clinical or effectiveness claim is made anywhere in this project.
+
+## Layout
+
+| Path | What |
+|---|---|
+| `host/orca/` | Laptop-side Python: games, OG link and screen, the four agents, simulator, session log. |
+| `host/tests/` | Host tests: no hardware needed. |
+| `host/supabase_schema.sql` | Tables: `rounds`, `hand_readings`, `face_readings`. |
+| `docs/` | `images/` for this README, and `make_images.py` that draws them. |
+| `notebook/` | Design notes, rules, camera research, manual test cards, hackathon text. |
+| `../apps/orca/` | OG firmware pair. The display half is a terminal driven over USB CDC. |
+| `../bsp/`, `../tools/` | The FreeWili OG board-support package this builds on, and its `fw.py` task runner. |
+
+## Credits and licence
+
+Built on the FreeWili OG BSP in this repository (see its licence and `AGENTS.md`). Agents use the
+[Fetch.ai uAgents](https://github.com/fetchai/uAgents) framework and Agentverse. Beat Flick's scoring idea is
+adapted from the MIT-licensed [BeepSaber](https://github.com/NeoSpark314/BeepSaber); its song is synthesised in
+code, so there are no audio licences to worry about.

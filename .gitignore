@@ -44,6 +44,11 @@ wilirehab/host/sessions/
 *.sql
 orca/host/devices.json
 
+# The notebook is local working notes: it stays on this machine and is never pushed.
+# Both folder names, in case the old one comes back.
+orca/notebook/
+wilirehab/notebook/
+
 # Maintainer-only orientation doc. AGENTS.md is the published one.
 AGENTS.local.md
 
